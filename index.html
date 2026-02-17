@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TechTree Studio</title>
+    <script>
+      if (window.location.protocol === 'file:') {
+        document.addEventListener('DOMContentLoaded', function() {
+          document.body.innerHTML = '<div style="font-family:sans-serif;padding:2rem;max-width:500px;"><h1>TechTree Studio</h1><p>Откройте через <b>START.bat</b> (dev-сервер) или <b>OPEN.bat</b> (сборка + preview).</p><p>Приложения на ES-модулях не работают при прямом открытии (file://) из-за ограничений браузера.</p></div>';
+        });
+      } else {
+        var s = document.createElement('script');
+        s.type = 'module';
+        s.src = '/src/main.tsx';
+        document.head.appendChild(s);
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
