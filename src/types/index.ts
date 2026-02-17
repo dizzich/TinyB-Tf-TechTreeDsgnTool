@@ -78,6 +78,8 @@ export interface NodeData {
   // --- Timestamps ---
   createdAt?: string;
   updatedAt?: string;
+  /** Last modified in editor (ISO). Used for sync to decide push. */
+  localModifiedAt?: string;
 
   // Custom fields for template engine
   [key: string]: any;

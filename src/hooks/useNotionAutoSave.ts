@@ -24,8 +24,14 @@ export const useNotionAutoSave = () => {
   const notionCorsProxy = useStore((s) => s.notionCorsProxy);
   const syncInProgress = useStore((s) => s.syncInProgress);
   const setSyncInProgress = useStore((s) => s.setSyncInProgress);
+  const setSyncProgress = useStore((s) => s.setSyncProgress);
   const setLastSyncTime = useStore((s) => s.setLastSyncTime);
+  const setLastSyncError = useStore((s) => s.setLastSyncError);
   const setNotionDirty = useStore((s) => s.setNotionDirty);
+  const dirtyNodeIds = useStore((s) => s.dirtyNodeIds);
+  const clearDirtyNodes = useStore((s) => s.clearDirtyNodes);
+  const syncJustCompleted = useStore((s) => s.syncJustCompleted);
+  const setSyncJustCompleted = useStore((s) => s.setSyncJustCompleted);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevNodesRef = useRef(nodes);
@@ -35,6 +41,13 @@ export const useNotionAutoSave = () => {
 
   useEffect(() => {
     if (!notionSourceOfTruth || !notionConfig || syncInProgress) return;
+
+    if (syncJustCompleted) {
+      setSyncJustCompleted(false);
+      prevNodesRef.current = nodes;
+      prevEdgesRef.current = edges;
+      return;
+    }
 
     // Skip the very first change after mount (it's the initial data load / pull)
     if (initialLoadRef.current) {
@@ -60,14 +73,29 @@ export const useNotionAutoSave = () => {
       // Re-check syncInProgress from store (it could have changed during debounce)
       if (useStore.getState().syncInProgress) return;
 
+      const dirty = useStore.getState().dirtyNodeIds;
+      // Only push nodes that were actually changed in the graph; never full push from auto-save
+      if (dirty.size === 0) return;
+
       try {
         setSyncInProgress(true);
+        setSyncProgress({ current: 0, total: dirty.size });
         const proxy = getEffectiveProxy(notionCorsProxy);
-        await pushToNotion(nodes, edges, notionConfig, proxy);
+        await pushToNotion(
+          nodes,
+          edges,
+          notionConfig,
+          proxy,
+          (current, total) => useStore.getState().setSyncProgress({ current, total }),
+          dirty
+        );
         setLastSyncTime(new Date().toISOString());
+        setLastSyncError(null);
         setNotionDirty(false);
+        clearDirtyNodes();
       } catch (err) {
         console.error('[Notion auto-save] Failed:', err);
+        useStore.getState().setLastSyncError(err instanceof Error ? err.message : String(err));
         // Keep dirty flag — will retry on next change
       } finally {
         setSyncInProgress(false);
@@ -77,5 +105,5 @@ export const useNotionAutoSave = () => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [nodes, edges, notionSourceOfTruth, notionConfig, syncInProgress, notionCorsProxy, setSyncInProgress, setLastSyncTime, setNotionDirty]);
+  }, [nodes, edges, notionSourceOfTruth, notionConfig, syncInProgress, notionCorsProxy, dirtyNodeIds, syncJustCompleted, setSyncJustCompleted, setSyncInProgress, setSyncProgress, setLastSyncTime, setLastSyncError, setNotionDirty, clearDirtyNodes]);
 };

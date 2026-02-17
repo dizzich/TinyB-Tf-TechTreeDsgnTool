@@ -151,6 +151,60 @@ export const queryAllPages = async (
   return allPages;
 };
 
+/** Query pages with optional filter (e.g. last_edited_time after) */
+const queryPagesFiltered = async (
+  databaseId: string,
+  options: NotionApiOptions,
+  filter?: object
+): Promise<any[]> => {
+  const allPages: any[] = [];
+  let startCursor: string | undefined;
+  let hasMore = true;
+
+  while (hasMore) {
+    const body: any = { page_size: 100 };
+    if (startCursor) body.start_cursor = startCursor;
+    if (filter) body.filter = filter;
+
+    const response = await notionFetch(
+      `/databases/${databaseId}/query`,
+      options,
+      { method: 'POST', body: JSON.stringify(body) }
+    );
+
+    allPages.push(...response.results);
+    hasMore = response.has_more;
+    startCursor = response.next_cursor;
+  }
+
+  return allPages;
+};
+
+/** Light query: fetch most recently edited page to check if Notion has updates since lastSyncTime */
+export const checkForNotionUpdates = async (
+  config: NotionConfig,
+  lastSyncTime: string | null,
+  corsProxy?: string
+): Promise<{ hasUpdates: boolean; lastEditedTime?: string }> => {
+  const options: NotionApiOptions = { apiKey: config.apiKey, corsProxy };
+  const body = {
+    page_size: 1,
+    sorts: [{ timestamp: 'last_edited_time' as const, direction: 'descending' as const }],
+  };
+  const response = await notionFetch(
+    `/databases/${config.databaseId}/query`,
+    options,
+    { method: 'POST', body: JSON.stringify(body) }
+  );
+  const results = response.results || [];
+  if (results.length === 0) return { hasUpdates: false };
+  const lastEdited = (results[0] as any).last_edited_time;
+  if (!lastSyncTime) return { hasUpdates: true, lastEditedTime: lastEdited };
+  const remoteTime = new Date(lastEdited).getTime();
+  const localTime = new Date(lastSyncTime).getTime();
+  return { hasUpdates: remoteTime > localTime, lastEditedTime: lastEdited };
+};
+
 /** Extract plain text from a Notion rich_text array */
 const getPlainText = (richText: any[]): string => {
   if (!richText || !Array.isArray(richText)) return '';
@@ -312,11 +366,183 @@ export const pullFromNotion = async (
   return { nodes, edges: uniqueEdges };
 };
 
+/** Convert raw pages to nodes + edges (shared logic). pageIdToNodeId is pre-filled from local; pulled nodes use existing id when matching. */
+const pagesToNodesAndEdges = (
+  pages: any[],
+  config: NotionConfig,
+  pageIdToNodeId: Map<string, string>
+): { nodes: TechNode[]; edges: TechEdge[] } => {
+  const cm = config.columnMapping;
+  const nodes: TechNode[] = [];
+  const edges: TechEdge[] = [];
+
+  pages.forEach((page, index) => {
+    const { notionPageId, data, position } = notionPageToNodeData(page, config);
+    const nodeId = pageIdToNodeId.get(notionPageId) ?? data.techCraftId ?? `notion-${index}`;
+    pageIdToNodeId.set(notionPageId, nodeId);
+
+    nodes.push({
+      id: nodeId,
+      position: position || { x: 0, y: 0 },
+      data,
+      type: 'techNode',
+    });
+  });
+
+  pages.forEach((page) => {
+    const props = page.properties;
+    const nodeId = pageIdToNodeId.get(page.id);
+    if (!nodeId) return;
+
+    if (cm.prevTechs && props[cm.prevTechs]) {
+      const relIds = getRelationIds(props[cm.prevTechs]);
+      relIds.forEach((relPageId) => {
+        const sourceNodeId = pageIdToNodeId.get(relPageId);
+        if (sourceNodeId && sourceNodeId !== nodeId) {
+          edges.push({
+            id: `e-${sourceNodeId}-${nodeId}`,
+            source: sourceNodeId,
+            target: nodeId,
+            type: 'default',
+            animated: true,
+          });
+        }
+      });
+    }
+    if (cm.nextTechs && props[cm.nextTechs]) {
+      const relIds = getRelationIds(props[cm.nextTechs]);
+      relIds.forEach((relPageId) => {
+        const targetNodeId = pageIdToNodeId.get(relPageId);
+        if (targetNodeId && targetNodeId !== nodeId) {
+          edges.push({
+            id: `e-${nodeId}-${targetNodeId}`,
+            source: nodeId,
+            target: targetNodeId,
+            type: 'default',
+            animated: true,
+          });
+        }
+      });
+    }
+  });
+
+  const uniqueEdges = edges.filter((edge, i, self) =>
+    i === self.findIndex((t) => t.source === edge.source && t.target === edge.target)
+  );
+  return { nodes, edges: uniqueEdges };
+};
+
+/** Fetch changed pages as nodes/edges (no merge). Used by pullFromNotionIncremental and bidirectionalSync. */
+const pullChangedPagesAsRemote = async (
+  config: NotionConfig,
+  lastSyncTime: string,
+  localNodes: TechNode[],
+  corsProxy?: string
+): Promise<{ nodes: TechNode[]; edges: TechEdge[] }> => {
+  const options: NotionApiOptions = { apiKey: config.apiKey, corsProxy };
+  // Use on_or_after and subtract 1s to catch edits at the boundary
+  const adjustedTime = new Date(new Date(lastSyncTime).getTime() - 1000).toISOString();
+  const filter = {
+    timestamp: 'last_edited_time' as const,
+    last_edited_time: { on_or_after: adjustedTime },
+  };
+  const pages = await queryPagesFiltered(config.databaseId, options, filter);
+  if (pages.length === 0) return { nodes: [], edges: [] };
+
+  const pageIdToNodeId = new Map<string, string>();
+  localNodes.forEach((n) => {
+    if (n.data.notionPageId) pageIdToNodeId.set(n.data.notionPageId, n.id);
+    if (n.data.techCraftId) pageIdToNodeId.set(n.data.techCraftId, n.id);
+  });
+
+  return pagesToNodesAndEdges(pages, config, pageIdToNodeId);
+};
+
+/** Incremental pull: fetch only pages edited after lastSyncTime and merge with local */
+export const pullFromNotionIncremental = async (
+  config: NotionConfig,
+  lastSyncTime: string | null,
+  localNodes: TechNode[],
+  localEdges: TechEdge[],
+  corsProxy?: string
+): Promise<{ nodes: TechNode[]; edges: TechEdge[] }> => {
+  if (!lastSyncTime) {
+    return pullFromNotion(config, corsProxy);
+  }
+
+  const { nodes: pulledNodes, edges: pulledEdges } = await pullChangedPagesAsRemote(
+    config,
+    lastSyncTime,
+    localNodes,
+    corsProxy
+  );
+  // No changes: return local state with new refs (no full pull to avoid scanning all)
+  if (pulledNodes.length === 0) {
+    return { nodes: [...localNodes], edges: [...localEdges] };
+  }
+
+  const pulledNodeIds = new Set(pulledNodes.map((n) => n.id));
+  const pulledByNotionId = new Map(pulledNodes.map((n) => [n.data.notionPageId!, n]));
+  const pulledByTechCraftId = new Map(
+    pulledNodes.filter((n) => n.data.techCraftId).map((n) => [n.data.techCraftId!, n])
+  );
+
+  const mergedNodes = localNodes
+    .filter((local) => {
+      const pulled = local.data.notionPageId
+        ? pulledByNotionId.get(local.data.notionPageId)
+        : local.data.techCraftId
+          ? pulledByTechCraftId.get(local.data.techCraftId)
+          : undefined;
+      return !pulled;
+    })
+    .concat(
+      pulledNodes.map((pulled) => {
+        const local = localNodes.find(
+          (n) =>
+            n.data.notionPageId === pulled.data.notionPageId ||
+            (n.data.techCraftId && n.data.techCraftId === pulled.data.techCraftId)
+        );
+        if (local) return { ...pulled, position: local.position };
+        return pulled;
+      })
+    );
+
+  const mergedEdges = [
+    ...localEdges.filter((e) => !pulledNodeIds.has(e.source) && !pulledNodeIds.has(e.target)),
+    ...pulledEdges,
+  ].filter(
+    (edge, i, self) =>
+      i === self.findIndex((t) => t.source === edge.source && t.target === edge.target)
+  );
+
+  return { nodes: mergedNodes, edges: mergedEdges };
+};
+
+/** Run async tasks with a concurrency limit (e.g. 3 parallel Notion API calls) */
+const parallelLimit = async <T>(
+  tasks: (() => Promise<T>)[],
+  limit: number
+): Promise<T[]> => {
+  const results: T[] = [];
+  const executing = new Set<Promise<void>>();
+  for (const task of tasks) {
+    const p = (async () => {
+      results.push(await task());
+    })();
+    const tracked = p.then(() => { executing.delete(tracked); });
+    executing.add(tracked);
+    if (executing.size >= limit) await Promise.race(executing);
+  }
+  await Promise.all(executing);
+  return results;
+};
+
 /** Build Notion properties object from NodeData for creating/updating a page */
 const buildNotionProperties = (
   data: NodeData,
   config: NotionConfig,
-  allNodes: TechNode[],
+  nodeMap: Map<string, TechNode>,
   edges: TechEdge[],
   nodeId: string,
   position?: { x: number; y: number }
@@ -354,13 +580,10 @@ const buildNotionProperties = (
     props[cm.notionSyncStatus] = { select: { name: data.notionSyncStatus } };
   }
 
-  // Relations: PrevTechs
+  // Relations: PrevTechs — O(1) lookups via nodeMap
   const incomingEdges = edges.filter(e => e.target === nodeId);
   const prevRelations = incomingEdges
-    .map(e => {
-      const sourceNode = allNodes.find(n => n.id === e.source);
-      return sourceNode?.data?.notionPageId;
-    })
+    .map(e => nodeMap.get(e.source)?.data?.notionPageId)
     .filter(Boolean)
     .map(pageId => ({ id: pageId }));
 
@@ -368,13 +591,10 @@ const buildNotionProperties = (
     props[cm.prevTechs] = { relation: prevRelations };
   }
 
-  // Relations: NextTechs
+  // Relations: NextTechs — O(1) lookups via nodeMap
   const outgoingEdges = edges.filter(e => e.source === nodeId);
   const nextRelations = outgoingEdges
-    .map(e => {
-      const targetNode = allNodes.find(n => n.id === e.target);
-      return targetNode?.data?.notionPageId;
-    })
+    .map(e => nodeMap.get(e.target)?.data?.notionPageId)
     .filter(Boolean)
     .map(pageId => ({ id: pageId }));
 
@@ -396,23 +616,43 @@ const buildNotionProperties = (
   return props;
 };
 
-/** Push local nodes to Notion — create new or update existing pages */
+const PUSH_CONCURRENCY = 3; // Stay within Notion API ~3 req/s limit
+
+const toSet = (ids: Set<string> | string[] | undefined): Set<string> | undefined => {
+  if (!ids) return undefined;
+  if (ids instanceof Set) return ids.size > 0 ? ids : undefined;
+  return ids.length > 0 ? new Set(ids) : undefined;
+};
+
+/** Push local nodes to Notion — create new or update existing pages (parallelized).
+ * When dirtyNodeIds is provided and non-empty, only pushes those nodes (incremental).
+ * When dirtyNodeIds is empty, no-op. When not provided, full push. */
 export const pushToNotion = async (
   nodes: TechNode[],
   edges: TechEdge[],
   config: NotionConfig,
-  corsProxy?: string
+  corsProxy?: string,
+  onProgress?: (current: number, total: number) => void,
+  dirtyNodeIds?: Set<string> | string[]
 ): Promise<SyncResult> => {
+  const dirty = toSet(dirtyNodeIds);
+  if (dirty !== undefined && dirty.size === 0) {
+    return { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] };
+  }
+  const nodesToPush = dirty
+    ? nodes.filter((n) => dirty.has(n.id))
+    : nodes;
+
   const options: NotionApiOptions = { apiKey: config.apiKey, corsProxy };
   const result: SyncResult = { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] };
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-  for (const node of nodes) {
+  const tasks = nodesToPush.map((node, index) => async () => {
     try {
-      const properties = buildNotionProperties(node.data, config, nodes, edges, node.id, node.position);
+      const properties = buildNotionProperties(node.data, config, nodeMap, edges, node.id, node.position);
 
       if (node.data.notionPageId) {
-        // Update existing page
-        await notionFetch(
+        const response = await notionFetch(
           `/pages/${node.data.notionPageId}`,
           options,
           {
@@ -420,9 +660,9 @@ export const pushToNotion = async (
             body: JSON.stringify({ properties }),
           }
         );
+        if (response?.last_edited_time) node.data.updatedAt = response.last_edited_time;
         result.updated++;
       } else {
-        // Create new page
         const response = await notionFetch(
           '/pages',
           options,
@@ -434,15 +674,18 @@ export const pushToNotion = async (
             }),
           }
         );
-        // Store the new Notion page ID back to the node
         node.data.notionPageId = response.id;
+        if (response?.last_edited_time) node.data.updatedAt = response.last_edited_time;
         result.added++;
       }
     } catch (err: any) {
       result.errors.push(`${node.data.label || node.id}: ${err.message}`);
+    } finally {
+      onProgress?.(index + 1, nodesToPush.length);
     }
-  }
+  });
 
+  await parallelLimit(tasks, PUSH_CONCURRENCY);
   return result;
 };
 
@@ -451,7 +694,8 @@ export const bidirectionalSync = async (
   localNodes: TechNode[],
   localEdges: TechEdge[],
   config: NotionConfig,
-  corsProxy?: string
+  corsProxy?: string,
+  lastSyncTime?: string | null
 ): Promise<{
   mergedNodes: TechNode[];
   mergedEdges: TechEdge[];
@@ -459,8 +703,13 @@ export const bidirectionalSync = async (
 }> => {
   const result: SyncResult = { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] };
 
-  // Pull remote state
-  const remote = await pullFromNotion(config, corsProxy);
+  const remote = lastSyncTime
+    ? await pullChangedPagesAsRemote(config, lastSyncTime, localNodes, corsProxy)
+    : await pullFromNotion(config, corsProxy);
+
+  if (lastSyncTime && remote.nodes.length === 0) {
+    return { mergedNodes: localNodes, mergedEdges: localEdges, result };
+  }
 
   // Build lookup maps
   const localByTechCraftId = new Map<string, TechNode>();

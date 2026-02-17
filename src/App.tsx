@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar } from './components/Sidebar';
@@ -9,30 +9,87 @@ import { ExportModal } from './components/ExportModal';
 import { SettingsModal } from './components/SettingsModal';
 import { StartupModal } from './components/StartupModal';
 import { NotionSyncModal } from './components/NotionSyncModal';
+import { StatusBar } from './components/StatusBar';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useNotionAutoSave } from './hooks/useNotionAutoSave';
+import { useNotionPullOnFocus } from './hooks/useNotionPullOnFocus';
+import { useStore } from './store/useStore';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 function App() {
   useKeyboardShortcuts();
   useNotionAutoSave();
+  useNotionPullOnFocus();
+  
+  const theme = useStore((state) => state.ui.theme);
+  const sidebarOpen = useStore((state) => state.ui.sidebarOpen);
+  const inspectorOpen = useStore((state) => state.ui.inspectorOpen);
+  const toggleSidebar = useStore((state) => state.toggleSidebar);
+  const toggleInspector = useStore((state) => state.toggleInspector);
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.body.classList.add('theme-light');
+    } else {
+      document.body.classList.remove('theme-light');
+    }
+  }, [theme]);
 
   return (
     <ReactFlowProvider>
-      <div className="flex flex-col h-screen w-screen bg-white text-gray-900 overflow-hidden font-sans">
-        <Toolbar />
-        <div className="flex-1 flex overflow-hidden">
-          <Sidebar />
-          <div className="flex-1 relative">
+      <div
+        id="app"
+        className="grid h-screen w-screen overflow-hidden text-text bg-bg transition-all duration-300 ease-in-out"
+        style={{
+          gridTemplateColumns: `${sidebarOpen ? 'var(--sidebar-width)' : '0px'} ${sidebarOpen ? '8px' : '0px'} minmax(0, 1fr) ${inspectorOpen ? '280px' : '0px'}`,
+        }}
+      >
+        <div className={`relative ${!sidebarOpen && 'invisible w-0'}`}>
+           <Sidebar />
+        </div>
+        
+        {/* Resizer */}
+        <div className={`sidebar-resizer w-2 shrink-0 cursor-col-resize bg-panel-border hover:bg-accent/30 transition-colors ${!sidebarOpen && 'invisible w-0'}`} />
+
+        <div className="workspace relative min-w-0 flex flex-col bg-workspace-bg">
+          <Toolbar />
+          
+          {/* Floating Expand Buttons */}
+          {!sidebarOpen && (
+            <button
+              onClick={toggleSidebar}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-50 flex items-center justify-center w-6 h-12 bg-panel border-y border-r border-panel-border rounded-r-lg shadow-md text-muted hover:text-text hover:bg-panel-2 transition-all"
+              title="Показать сайдбар"
+            >
+              <ChevronRight size={16} />
+            </button>
+          )}
+          
+          {!inspectorOpen && (
+            <button
+              onClick={toggleInspector}
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-50 flex items-center justify-center w-6 h-12 bg-panel border-y border-l border-panel-border rounded-l-lg shadow-md text-muted hover:text-text hover:bg-panel-2 transition-all"
+              title="Показать инспектор"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          )}
+
+          <div className="flex-1 min-h-0 relative">
             <Graph />
           </div>
+          <StatusBar />
+        </div>
+
+        <div className={`relative ${!inspectorOpen && 'invisible w-0'}`}>
           <Inspector />
         </div>
-        <ImportModal />
-        <ExportModal />
-        <SettingsModal />
-        <StartupModal />
-        <NotionSyncModal />
       </div>
+      <ImportModal />
+      <ExportModal />
+      <SettingsModal />
+      <StartupModal />
+      <NotionSyncModal />
     </ReactFlowProvider>
   );
 }

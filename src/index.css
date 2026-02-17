@@ -2,8 +2,230 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  color-scheme: dark;
+  --bg: #15171c;
+  --panel: #1f2229;
+  --panel-2: #242832;
+  --text: #e6e9ef;
+  --muted: #9aa3b2;
+  --accent: #6aa2ff;
+  --accent-hover: #5a8fef;
+  --danger: #e36f6f;
+
+  --panel-border: #2c3340;
+  --divider: #323845;
+
+  --control-bg: #151920;
+  --control-border: #303748;
+  --control-bg-muted: #171b24;
+  --control-border-muted: #2a3344;
+  --control-hover-border: #3a465c;
+  --control-hover-bg: #252d3a;
+
+  --workspace-bg: #0d0f14;
+  --status-bg: #11131a;
+  --status-border: #2b303b;
+  --status-text: #9aa3b2;
+  --tooltip-bg: rgba(18, 22, 30, 0.95);
+  --modal-overlay: rgba(7, 10, 16, 0.7);
+  --modal-bg: #1b202a;
+  --modal-border: #2c3340;
+
+  --panel-shadow: 0 8px 18px rgba(5, 8, 14, 0.35);
+  --shadow-floating: 0 10px 24px rgba(6, 8, 14, 0.45);
+  --shadow-modal: 0 20px 40px rgba(5, 8, 14, 0.6);
+
+  --ui-scale: 1;
+  --tool-btn-size: 44px;
+  --sidebar-width: 320px;
+
+  --event-item-bg: #1a1e26;
+  --event-item-border: #2c3340;
+  --event-item-hover-bg: #252d3a;
+  --range-track: #2a3344;
+  --range-thumb: #6aa2ff;
+}
+
+body.theme-light {
+  color-scheme: light;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --panel-2: #f0f2f7;
+  --text: #1c232f;
+  --muted: #5a6575;
+  --accent: #3867d6;
+  --accent-hover: #2d55b5;
+  --danger: #d63031;
+
+  --panel-border: #d7dee8;
+  --divider: #e1e6ed;
+
+  --control-bg: #ffffff;
+  --control-border: #cfd6e2;
+  --control-bg-muted: #f0f2f7;
+  --control-border-muted: #d7dee8;
+  --control-hover-border: #b0b8c6;
+  --control-hover-bg: #e3e8f2;
+
+  --workspace-bg: #e3e8f2;
+  --status-bg: #ffffff;
+  --status-border: #d7dee8;
+  --status-text: #5a6575;
+  --tooltip-bg: rgba(255, 255, 255, 0.95);
+  --modal-overlay: rgba(28, 35, 47, 0.5);
+  --modal-bg: #ffffff;
+  --modal-border: #d7dee8;
+
+  --panel-shadow: 0 8px 18px rgba(148, 163, 184, 0.25);
+  --shadow-floating: 0 10px 24px rgba(148, 163, 184, 0.35);
+  --shadow-modal: 0 20px 40px rgba(148, 163, 184, 0.4);
+
+  --event-item-bg: #ffffff;
+  --event-item-border: #d7dee8;
+  --event-item-hover-bg: #f0f2f7;
+  --range-track: #d7dee8;
+  --range-thumb: #3867d6;
+}
+
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
   overflow: hidden;
+  font-family: 'Plus Jakarta Sans', 'Inter', 'Segoe UI', sans-serif;
+  font-size: 12px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+h2 {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+
+h3 {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+/* Scrollbar */
+.sidebar__scroll::-webkit-scrollbar,
+.panel__content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.sidebar__scroll::-webkit-scrollbar-track,
+.panel__content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar__scroll::-webkit-scrollbar-thumb,
+.panel__content::-webkit-scrollbar-thumb {
+  background: var(--panel-border);
+  border-radius: 999px;
+}
+
+.sidebar__scroll::-webkit-scrollbar-thumb:hover,
+.panel__content::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* React Flow: controls and minimap match design system */
+.react-flow__controls {
+  background: var(--panel) !important;
+  border: 1px solid var(--panel-border) !important;
+  border-radius: 14px;
+  box-shadow: var(--shadow-floating);
+}
+
+.react-flow__controls-button {
+  background: var(--control-bg-muted) !important;
+  border-color: var(--control-border-muted) !important;
+  color: var(--text) !important;
+  fill: var(--text) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--control-hover-bg) !important;
+  border-color: var(--control-hover-border) !important;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.react-flow__minimap {
+  background: var(--panel) !important;
+  border: 1px solid var(--panel-border) !important;
+  border-radius: 12px;
+  box-shadow: var(--panel-shadow);
+}
+
+/* React Flow: edge theming */
+.react-flow__edge-path {
+  stroke: var(--panel-border);
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+/* Selection color */
+::selection {
+  background: var(--accent);
+  color: #0f141c;
+}
+
+/* Button active press */
+.icon-btn:active {
+  transform: translateY(1px);
+}
+
+/* Custom checkbox styling */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  border-radius: 6px;
+}
+input[type="checkbox"]:checked {
+  box-shadow: 0 0 6px var(--accent);
+}
+
+/* Custom select styling */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
+/* Scrollbar for modal content */
+.modal__content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.modal__content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.modal__content::-webkit-scrollbar-thumb {
+  background: var(--panel-border);
+  border-radius: 999px;
+}
+.modal__content::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }

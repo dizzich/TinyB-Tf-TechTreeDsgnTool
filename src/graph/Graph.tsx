@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback } from 'react';
-import { ReactFlow, Controls, Background, MiniMap } from '@xyflow/react';
+import { ReactFlow, Controls, Background, MiniMap, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useStore } from '../store/useStore';
@@ -22,6 +22,8 @@ export const Graph = () => {
     deleteNodes: state.deleteNodes,
   }));
 
+  const theme = useStore((state) => state.ui.theme);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeTypes = useMemo(() => ({ techNode: TechNode as any }), []);
 
@@ -40,6 +42,12 @@ export const Graph = () => {
     [nodes, deleteNodes]
   );
 
+  const getMiniMapNodeColor = (node: any) => {
+    // Return theme-aware colors
+    if (node.selected) return theme === 'dark' ? '#6aa2ff' : '#3867d6';
+    return theme === 'dark' ? '#2c3340' : '#d7dee8';
+  };
+
   return (
     <div className="w-full h-full" onKeyDown={handleKeyDown} tabIndex={0}>
       <ReactFlow
@@ -50,12 +58,24 @@ export const Graph = () => {
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         fitView
-        className="bg-gray-50"
+        className="bg-workspace-bg"
         deleteKeyCode={null} // Disable default delete behavior, we handle it ourselves
+        defaultEdgeOptions={{
+          type: 'smoothstep',
+          style: { stroke: 'var(--panel-border)', strokeWidth: 1.5 },
+        }}
       >
-        <Background />
+        <Background
+          variant={BackgroundVariant.Dots}
+          color={theme === 'dark' ? '#1a1e26' : '#d7dee8'}
+          gap={20}
+          size={1}
+        />
         <Controls />
-        <MiniMap />
+        <MiniMap 
+          nodeColor={getMiniMapNodeColor} 
+          maskColor={theme === 'dark' ? 'rgba(21, 23, 28, 0.7)' : 'rgba(245, 247, 251, 0.7)'}
+        />
       </ReactFlow>
     </div>
   );

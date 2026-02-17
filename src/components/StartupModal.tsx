@@ -7,6 +7,16 @@ import { getLayoutedElements } from '../utils/autoLayout';
 
 const STORAGE_KEY = 'techtree_hide_startup';
 
+const modalOverlay = 'fixed inset-0 z-50 flex items-center justify-center backdrop-blur-[4px]';
+const modalDialog =
+  'bg-modal-bg border border-modal-border rounded-[16px] shadow-modal w-full max-w-2xl p-8 flex flex-col';
+const cardClass =
+  'border-2 border-panel-border rounded-panel p-6 bg-panel-2 hover:border-accent transition-all';
+const btnPrimary =
+  'w-full px-4 py-3 bg-accent text-[#0f141c] rounded-control font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors';
+const btnSecondary =
+  'w-full px-4 py-3 bg-control-bg border border-control-border rounded-control text-text font-medium hover:bg-control-hover-bg hover:border-control-hover-border disabled:opacity-50 transition-colors';
+
 export const StartupModal = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
@@ -15,10 +25,10 @@ export const StartupModal = () => {
   const nodes = useStore((state) => state.nodes);
   const loadProject = useStore((state) => state.loadProject);
   const notionConfig = useStore((state) => state.notionConfig);
-  const setNodes = useStore((state) => state.setNodes);
-  const setEdges = useStore((state) => state.setEdges);
+  const replaceNodesAndEdgesForSync = useStore((state) => state.replaceNodesAndEdgesForSync);
   const setNotionConnected = useStore((state) => state.setNotionConnected);
   const setNotionSourceOfTruth = useStore((state) => state.setNotionSourceOfTruth);
+  const setLastSyncTime = useStore((state) => state.setLastSyncTime);
   const settings = useStore((state) => state.settings);
   const setModalOpen = useStore((state) => state.setModalOpen);
   const { openProject } = useFileSystem();
@@ -54,7 +64,6 @@ export const StartupModal = () => {
     }
 
     if (notionConfig) {
-      // Config exists — pull directly like "opening a project"
       setLoading(true);
       setError('');
       try {
@@ -63,34 +72,24 @@ export const StartupModal = () => {
           NOTION_BUILTIN_PROXY
         );
 
-        // Use stored positions from Notion if available, otherwise auto-layout
-        const hasPositions = pulledNodes.some(n => n.position.x !== 0 || n.position.y !== 0);
-        if (hasPositions) {
-          setNodes(pulledNodes);
-          setEdges(pulledEdges);
-        } else {
-          const { nodes: layouted, edges: layoutedEdges } = getLayoutedElements(
-            pulledNodes,
-            pulledEdges,
-            settings.layoutDirection
-          );
-          setNodes(layouted);
-          setEdges(layoutedEdges);
-        }
+        const hasPositions = pulledNodes.some((n) => n.position.x !== 0 || n.position.y !== 0);
+        const toSet = hasPositions
+          ? { nodes: pulledNodes, edges: pulledEdges }
+          : getLayoutedElements(pulledNodes, pulledEdges, settings.layoutDirection);
+        replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges);
 
         setNotionConnected(true);
         setNotionSourceOfTruth(true);
+        setLastSyncTime(new Date().toISOString());
         setIsVisible(false);
       } catch (err) {
         console.error('Failed to pull from Notion:', err);
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg);
-        // Don't close — let user try again or go to config
       } finally {
         setLoading(false);
       }
     } else {
-      // No config yet — open Notion sync modal for first-time setup
       setIsVisible(false);
       setModalOpen('notionSync', true);
     }
@@ -104,38 +103,37 @@ export const StartupModal = () => {
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl p-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2 text-center">
-          TechTree Studio
-        </h1>
-        <p className="text-gray-600 text-center mb-8">
+    <div className={modalOverlay} style={{ background: 'var(--modal-overlay)' }}>
+      <div className={modalDialog}>
+        <h1 className="text-2xl font-bold text-text mb-2 text-center">TechTree Studio</h1>
+        <p className="text-muted text-center mb-8">
           Выберите, как вы хотите работать с деревом технологий
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          {/* Offline Mode */}
-          <div className="border-2 border-gray-200 rounded-lg p-6 hover:border-blue-500 hover:shadow-lg transition-all">
+          <div className={cardClass}>
             <div className="flex flex-col items-center text-center space-y-4">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-                <HardDrive size={32} className="text-blue-600" />
+              <div className="w-16 h-16 bg-control-bg-muted rounded-full flex items-center justify-center border border-control-border-muted">
+                <HardDrive size={32} className="text-accent" strokeWidth={1.75} />
               </div>
-              <h2 className="text-xl font-semibold">Офлайн режим</h2>
-              <p className="text-sm text-gray-600">
+              <h2 className="text-lg font-semibold text-text">Офлайн режим</h2>
+              <p className="text-sm text-muted">
                 Работа с локальными файлами на вашем компьютере.
               </p>
               <div className="space-y-2 w-full">
                 <button
+                  type="button"
                   onClick={handleOfflineMode}
                   disabled={loading}
-                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50"
+                  className={btnPrimary}
                 >
                   Открыть файл проекта
                 </button>
                 <button
+                  type="button"
                   onClick={handleStartBlank}
                   disabled={loading}
-                  className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
+                  className={btnSecondary}
                 >
                   Пустой проект
                 </button>
@@ -143,25 +141,25 @@ export const StartupModal = () => {
             </div>
           </div>
 
-          {/* Online Mode (Notion) */}
-          <div className="border-2 border-gray-200 rounded-lg p-6 hover:border-purple-500 hover:shadow-lg transition-all">
+          <div className={cardClass}>
             <div className="flex flex-col items-center text-center space-y-4">
-              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
-                <Cloud size={32} className="text-purple-600" />
+              <div className="w-16 h-16 bg-control-bg-muted rounded-full flex items-center justify-center border border-control-border-muted">
+                <Cloud size={32} className="text-accent" strokeWidth={1.75} />
               </div>
-              <h2 className="text-xl font-semibold">Notion</h2>
-              <p className="text-sm text-gray-600">
+              <h2 className="text-lg font-semibold text-text">Notion</h2>
+              <p className="text-sm text-muted">
                 {notionConfig
                   ? 'Загрузить дерево технологий из подключённой базы Notion.'
                   : 'Подключить базу данных Notion для синхронизации.'}
               </p>
               <div className="space-y-2 w-full">
                 <button
+                  type="button"
                   onClick={handleOnlineMode}
                   disabled={loading}
-                  className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium disabled:opacity-50 flex items-center justify-center"
+                  className={`${btnPrimary} flex items-center justify-center`}
                 >
-                  {loading && <Loader2 size={18} className="animate-spin mr-2" />}
+                  {loading && <Loader2 size={18} className="animate-spin mr-2" strokeWidth={1.75} />}
                   {loading
                     ? 'Загрузка из Notion...'
                     : notionConfig
@@ -170,16 +168,17 @@ export const StartupModal = () => {
                 </button>
                 {notionConfig && (
                   <button
+                    type="button"
                     onClick={handleGoToNotionConfig}
                     disabled={loading}
-                    className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-sm disabled:opacity-50"
+                    className={`${btnSecondary} text-sm`}
                   >
                     Настройки подключения
                   </button>
                 )}
               </div>
               {error && (
-                <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2 w-full text-left">
+                <div className="text-xs rounded-control p-2 w-full text-left bg-danger/15 border border-danger/45 text-danger">
                   {error}
                 </div>
               )}
@@ -188,12 +187,12 @@ export const StartupModal = () => {
         </div>
 
         <div className="flex items-center justify-center">
-          <label className="flex items-center text-sm text-gray-600 cursor-pointer">
+          <label className="checkbox-label flex items-center gap-2 text-sm text-muted cursor-pointer">
             <input
               type="checkbox"
               checked={dontShowAgain}
               onChange={(e) => setDontShowAgain(e.target.checked)}
-              className="mr-2"
+              className="w-4 h-4 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
             />
             Больше не показывать
           </label>

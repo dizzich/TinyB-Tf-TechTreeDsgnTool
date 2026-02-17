@@ -14,6 +14,7 @@ import {
 import { TechNode, TechEdge, ProjectMeta, ProjectSettings, NotionConfig, SyncResult } from '../types';
 
 const NOTION_STORAGE_KEY = 'techtree_notion_config';
+const THEME_STORAGE_KEY = 'techtree_theme';
 
 interface AppState {
   nodes: TechNode[];
@@ -26,12 +27,22 @@ interface AppState {
   notionCorsProxy: string;
   notionConnected: boolean;
   syncInProgress: boolean;
+  syncProgress: { current: number; total: number } | null;
   lastSyncResult: SyncResult | null;
   lastSyncTime: string | null;
+  lastSyncError: string | null;
   notionSourceOfTruth: boolean;
   notionDirty: boolean;
+  notionHasRemoteUpdates: boolean;
+  dirtyNodeIds: Set<string>;
+  syncJustCompleted: boolean;
 
   // UI State
+  ui: {
+    sidebarOpen: boolean;
+    inspectorOpen: boolean;
+    theme: 'dark' | 'light';
+  };
   modals: {
     import: boolean;
     settings: boolean;
@@ -45,6 +56,8 @@ interface AppState {
   onConnect: OnConnect;
   setNodes: (nodes: TechNode[]) => void;
   setEdges: (edges: TechEdge[]) => void;
+  /** Replace nodes/edges from sync (Pull). Clears temporal history and forces new refs. */
+  replaceNodesAndEdgesForSync: (nodes: TechNode[], edges: TechEdge[]) => void;
   addNode: (node: TechNode) => void;
   deleteNodes: (nodeIds: string[]) => void;
   updateNodeData: (id: string, data: any) => void;
@@ -57,12 +70,23 @@ interface AppState {
   setNotionCorsProxy: (proxy: string) => void;
   setNotionConnected: (connected: boolean) => void;
   setSyncInProgress: (inProgress: boolean) => void;
+  setSyncProgress: (progress: { current: number; total: number } | null) => void;
   setLastSyncResult: (result: SyncResult | null) => void;
   setLastSyncTime: (time: string | null) => void;
+  setLastSyncError: (error: string | null) => void;
   setNotionSourceOfTruth: (enabled: boolean) => void;
   setNotionDirty: (dirty: boolean) => void;
+  setNotionHasRemoteUpdates: (has: boolean) => void;
+  markNodesDirty: (ids: string[]) => void;
+  clearDirtyNodes: () => void;
+  setSyncJustCompleted: (value: boolean) => void;
 
   setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync', isOpen: boolean) => void;
+  
+  // UI Actions
+  toggleSidebar: () => void;
+  toggleInspector: () => void;
+  setTheme: (theme: 'dark' | 'light') => void;
 }
 
 const defaultSettings: ProjectSettings = {
@@ -75,9 +99,8 @@ const defaultMeta: ProjectMeta = {
   name: 'New Project',
   updatedAt: new Date().toISOString(),
   version: '1.0',
-};
+  };
 
-// Load persisted Notion config from localStorage
 const loadNotionConfig = (): NotionConfig | null => {
   try {
     const stored = localStorage.getItem(NOTION_STORAGE_KEY);
@@ -95,6 +118,32 @@ const persistNotionConfig = (config: NotionConfig | null) => {
   }
 };
 
+const loadTheme = (): 'dark' | 'light' => {
+  return (localStorage.getItem(THEME_STORAGE_KEY) as 'dark' | 'light') || 'dark';
+};
+
+const LAST_SYNC_PREFIX = 'techtree_last_sync_';
+
+const loadLastSyncTime = (databaseId: string | undefined): string | null => {
+  if (!databaseId) return null;
+  try {
+    return localStorage.getItem(`${LAST_SYNC_PREFIX}${databaseId}`);
+  } catch {
+    return null;
+  }
+};
+
+const persistLastSyncTime = (databaseId: string | undefined, time: string | null) => {
+  if (!databaseId) return;
+  if (time) {
+    localStorage.setItem(`${LAST_SYNC_PREFIX}${databaseId}`, time);
+  } else {
+    localStorage.removeItem(`${LAST_SYNC_PREFIX}${databaseId}`);
+  }
+};
+
+const nowIso = () => new Date().toISOString();
+
 export const useStore = create<AppState>()(
   temporal(
     (set, get) => ({
@@ -108,10 +157,21 @@ export const useStore = create<AppState>()(
       notionCorsProxy: localStorage.getItem('techtree_notion_cors_proxy') || '',
       notionConnected: false,
       syncInProgress: false,
+      syncProgress: null,
       lastSyncResult: null,
-      lastSyncTime: null,
+      lastSyncTime: loadLastSyncTime(loadNotionConfig()?.databaseId),
+      lastSyncError: null,
       notionSourceOfTruth: false,
       notionDirty: false,
+      notionHasRemoteUpdates: false,
+      dirtyNodeIds: new Set<string>(),
+      syncJustCompleted: false,
+
+      ui: {
+        sidebarOpen: true,
+        inspectorOpen: true,
+        theme: loadTheme(),
+      },
 
       modals: {
         import: false,
@@ -121,27 +181,82 @@ export const useStore = create<AppState>()(
       },
 
       onNodesChange: (changes: NodeChange<TechNode>[]) => {
-        set({
-          nodes: applyNodeChanges(changes, get().nodes),
-        });
+        const changedIds: string[] = [];
+        for (const c of changes) {
+          if (c.type === 'position' && c.id) changedIds.push(c.id);
+          else if (c.type === 'dimensions' && c.id) changedIds.push(c.id);
+        }
+        let newNodes = applyNodeChanges(changes, get().nodes);
+        if (changedIds.length > 0) {
+          const ts = nowIso();
+          const ids = new Set(changedIds);
+          newNodes = newNodes.map((n) =>
+            ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+          );
+          const next = new Set(get().dirtyNodeIds);
+          changedIds.forEach((id) => next.add(id));
+          set({ nodes: newNodes, dirtyNodeIds: next });
+        } else {
+          set({ nodes: newNodes });
+        }
       },
 
       onEdgesChange: (changes: EdgeChange<TechEdge>[]) => {
-        set({
-          edges: applyEdgeChanges(changes, get().edges),
-        });
+        const currentEdges = get().edges;
+        const removedIds: string[] = [];
+        for (const c of changes) {
+          if (c.type === 'remove' && c.id) {
+            const edge = currentEdges.find((e) => e.id === c.id);
+            if (edge) removedIds.push(edge.source, edge.target);
+          }
+        }
+        const newEdges = applyEdgeChanges(changes, currentEdges);
+        if (removedIds.length > 0) {
+          const ts = nowIso();
+          const ids = new Set(removedIds);
+          const newNodes = get().nodes.map((n) =>
+            ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+          );
+          const next = new Set(get().dirtyNodeIds);
+          removedIds.forEach((id) => next.add(id));
+          set({ nodes: newNodes, edges: newEdges, dirtyNodeIds: next });
+        } else {
+          set({ edges: newEdges });
+        }
       },
 
       onConnect: (connection: Connection) => {
+        const next = new Set(get().dirtyNodeIds);
+        const ids = new Set<string>();
+        if (connection.source) { next.add(connection.source); ids.add(connection.source); }
+        if (connection.target) { next.add(connection.target); ids.add(connection.target); }
+        const ts = nowIso();
+        const newNodes = get().nodes.map((n) =>
+          ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+        );
         set({
+          nodes: newNodes,
           edges: addEdge(connection, get().edges),
+          dirtyNodeIds: next,
         });
       },
 
       setNodes: (nodes) => set({ nodes }),
       setEdges: (edges) => set({ edges }),
+      replaceNodesAndEdgesForSync: (nodes, edges) => {
+        (useStore as any).temporal?.getState?.().clear?.();
+        set({ nodes: [...nodes], edges: [...edges], syncJustCompleted: true, dirtyNodeIds: new Set<string>() });
+      },
 
-      addNode: (node) => set({ nodes: [...get().nodes, node] }),
+      addNode: (node) => {
+        const next = new Set(get().dirtyNodeIds);
+        next.add(node.id);
+        const nodeWithTs = {
+          ...node,
+          data: { ...node.data, localModifiedAt: nowIso() },
+        };
+        set({ nodes: [...get().nodes, nodeWithTs], dirtyNodeIds: next });
+      },
 
       deleteNodes: (nodeIds) => {
         set({
@@ -153,10 +268,16 @@ export const useStore = create<AppState>()(
       },
 
       updateNodeData: (id, data) => {
+        const next = new Set(get().dirtyNodeIds);
+        next.add(id);
+        const ts = nowIso();
         set({
           nodes: get().nodes.map((node) =>
-            node.id === id ? { ...node, data: { ...node.data, ...data } } : node
+            node.id === id
+              ? { ...node, data: { ...node.data, ...data, localModifiedAt: ts } }
+              : node
           ),
+          dirtyNodeIds: next,
         });
       },
 
@@ -176,20 +297,47 @@ export const useStore = create<AppState>()(
       // Notion actions
       setNotionConfig: (config) => {
         persistNotionConfig(config);
-        set({ notionConfig: config });
+        set({
+          notionConfig: config,
+          lastSyncTime: config ? loadLastSyncTime(config.databaseId) : null,
+        });
       },
       setNotionCorsProxy: (proxy) => {
         localStorage.setItem('techtree_notion_cors_proxy', proxy);
         set({ notionCorsProxy: proxy });
       },
       setNotionConnected: (connected) => set({ notionConnected: connected }),
-      setSyncInProgress: (inProgress) => set({ syncInProgress: inProgress }),
+      setSyncInProgress: (inProgress) => set({
+        syncInProgress: inProgress,
+        ...(inProgress ? {} : { syncProgress: null }),
+      }),
+      setSyncProgress: (progress) => set({ syncProgress: progress }),
       setLastSyncResult: (result) => set({ lastSyncResult: result }),
-      setLastSyncTime: (time) => set({ lastSyncTime: time }),
+      setLastSyncTime: (time) => {
+        persistLastSyncTime(get().notionConfig?.databaseId, time);
+        set({ lastSyncTime: time, lastSyncError: null });
+      },
+      setLastSyncError: (error) => set({ lastSyncError: error }),
       setNotionSourceOfTruth: (enabled) => set({ notionSourceOfTruth: enabled }),
       setNotionDirty: (dirty) => set({ notionDirty: dirty }),
+      setNotionHasRemoteUpdates: (has) => set({ notionHasRemoteUpdates: has }),
+      markNodesDirty: (ids) => {
+        const next = new Set(get().dirtyNodeIds);
+        ids.forEach((id) => next.add(id));
+        set({ dirtyNodeIds: next });
+      },
+      clearDirtyNodes: () => set({ dirtyNodeIds: new Set<string>() }),
+      setSyncJustCompleted: (value) => set({ syncJustCompleted: value }),
 
       setModalOpen: (modal, isOpen) => set({ modals: { ...get().modals, [modal]: isOpen } }),
+
+      // UI Actions
+      toggleSidebar: () => set((state) => ({ ui: { ...state.ui, sidebarOpen: !state.ui.sidebarOpen } })),
+      toggleInspector: () => set((state) => ({ ui: { ...state.ui, inspectorOpen: !state.ui.inspectorOpen } })),
+      setTheme: (theme) => {
+        localStorage.setItem(THEME_STORAGE_KEY, theme);
+        set((state) => ({ ui: { ...state.ui, theme } }));
+      },
     })
   )
 );
