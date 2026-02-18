@@ -11,7 +11,7 @@ import {
   OnEdgesChange,
   OnConnect,
 } from '@xyflow/react';
-import { TechNode, TechEdge, ProjectMeta, ProjectSettings, NotionConfig, SyncResult, DEFAULT_NODE_COLOR_PALETTE } from '../types';
+import { TechNode, TechEdge, ProjectMeta, ProjectSettings, NotionConfig, SyncResult, DEFAULT_NODE_COLOR_PALETTE, CanvasFilter } from '../types';
 
 const NOTION_STORAGE_KEY = 'techtree_notion_config';
 const THEME_STORAGE_KEY = 'techtree_theme';
@@ -37,6 +37,9 @@ interface AppState {
   dirtyNodeIds: Set<string>;
   syncJustCompleted: boolean;
   notionFieldColors: Record<string, Record<string, string>>;
+
+  // Canvas filter (runtime UI state, not persisted in project)
+  canvasFilter: CanvasFilter;
 
   // UI State
   ui: {
@@ -88,8 +91,10 @@ interface AppState {
   clearDirtyNodes: () => void;
   setSyncJustCompleted: (value: boolean) => void;
 
+  setCanvasFilter: (filter: Partial<CanvasFilter>) => void;
+
   setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync' | 'colorMapping', isOpen: boolean) => void;
-  
+
   // UI Actions
   toggleSidebar: () => void;
   toggleInspector: () => void;
@@ -176,6 +181,14 @@ export const useStore = create<AppState>()(
       dirtyNodeIds: new Set<string>(),
       syncJustCompleted: false,
       notionFieldColors: {},
+
+      canvasFilter: {
+        enabled: false,
+        act: [],
+        stage: [],
+        category: [],
+        hideMode: 'dim',
+      },
 
       ui: {
         sidebarOpen: true,
@@ -360,6 +373,15 @@ export const useStore = create<AppState>()(
       },
       clearDirtyNodes: () => set({ dirtyNodeIds: new Set<string>() }),
       setSyncJustCompleted: (value) => set({ syncJustCompleted: value }),
+
+      setCanvasFilter: (filter) => {
+        const current = get().canvasFilter;
+        const next = { ...current, ...filter };
+        // Auto-enable/disable based on whether any filter is active
+        const hasFilters = next.act.length > 0 || next.stage.length > 0 || next.category.length > 0;
+        next.enabled = hasFilters;
+        set({ canvasFilter: next });
+      },
 
       setModalOpen: (modal, isOpen) => set({ modals: { ...get().modals, [modal]: isOpen } }),
 

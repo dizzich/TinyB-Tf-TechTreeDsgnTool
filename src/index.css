@@ -234,3 +234,23 @@ select {
 .modal__content::-webkit-scrollbar-thumb:hover {
   background: var(--muted);
 }
+
+/* Canvas filter: nodes matching the filter — slightly brighter */
+.react-flow__node.canvas-filter-match {
+  filter: brightness(1.15);
+  transition: filter 0.3s ease, opacity 0.3s ease;
+}
+
+/* Canvas filter: nodes NOT matching — dim and semi-transparent */
+.react-flow__node.canvas-filter-dim {
+  opacity: 0.25;
+  filter: brightness(0.6);
+  transition: filter 0.3s ease, opacity 0.3s ease;
+  pointer-events: none;
+}
+
+/* Canvas filter: edges connected to dim nodes */
+.react-flow__edge.canvas-filter-dim-edge .react-flow__edge-path {
+  opacity: 0.12;
+  transition: opacity 0.3s ease;
+}

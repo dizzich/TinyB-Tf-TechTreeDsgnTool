@@ -187,6 +187,8 @@ export const DEFAULT_NODE_COLOR_PALETTE = [
 /** Explicit value → color mapping. Keys are attribute values (empty string = no value). */
 export type NodeColorMap = Record<string, string>;
 
+export type EdgeType = 'default' | 'straight' | 'step' | 'smoothstep';
+
 export interface ProjectSettings {
   layoutDirection: 'LR' | 'TB';
   nodeTemplate: string;
@@ -195,6 +197,21 @@ export interface ProjectSettings {
   nodeColorPalette?: string[];
   /** Explicit value-to-color mapping. Overrides hash when set. */
   nodeColorMap?: NodeColorMap;
+  /** Edge connection type: default (Bezier), straight, step (orthogonal), smoothstep (rounded orthogonal) */
+  edgeType?: EdgeType;
+  /** Edge stroke width (1-5), default 2 */
+  edgeStrokeWidth?: number;
+  /** Edge animation (running dots), default false */
+  edgeAnimated?: boolean;
+}
+
+export interface CanvasFilter {
+  enabled: boolean;
+  act: string[];
+  stage: string[];
+  category: string[];
+  /** dim = semi-transparent + darker, hide = don't render */
+  hideMode: 'dim' | 'hide';
 }
 
 export interface ProjectMeta {

@@ -46,8 +46,6 @@ function App() {
       >
         {/* Workspace fills the screen; panels overlay on top for glass effect */}
         <div className="workspace flex-1 min-w-0 flex flex-col bg-workspace-bg relative z-0">
-          <Toolbar />
-          
           {!sidebarOpen && (
             <button
               onClick={toggleSidebar}
@@ -91,6 +89,16 @@ function App() {
             <Inspector />
           </div>
         )}
+
+        <div
+          className="absolute top-0 z-30 transition-[left,right] duration-300 ease-in-out"
+          style={{
+            left: sidebarOpen ? 'var(--sidebar-width)' : 0,
+            right: inspectorOpen ? '20rem' : 0,
+          }}
+        >
+          <Toolbar />
+        </div>
       </div>
       <ImportModal />
       <ExportModal />
