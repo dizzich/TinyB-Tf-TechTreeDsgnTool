@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
-import { pushToNotion } from '../utils/notionApi';
-import { NOTION_BUILTIN_PROXY } from '../utils/notionApi';
+import { pushToNotion, pullFromNotionIncremental, NOTION_BUILTIN_PROXY } from '../utils/notionApi';
+import { getLayoutedElements } from '../utils/autoLayout';
 
 const AUTO_SAVE_DELAY = 3000; // 3 seconds debounce
 
@@ -106,4 +106,53 @@ export const useNotionAutoSave = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [nodes, edges, notionSourceOfTruth, notionConfig, syncInProgress, notionCorsProxy, dirtyNodeIds, syncJustCompleted, setSyncJustCompleted, setSyncInProgress, setSyncProgress, setLastSyncTime, setLastSyncError, setNotionDirty, clearDirtyNodes]);
+
+  // Auto-pull incoming changes when safe: notionSourceOfTruth enabled, remote updates flagged, no local dirty nodes
+  const notionHasRemoteUpdates = useStore((s) => s.notionHasRemoteUpdates);
+  const setNotionHasRemoteUpdates = useStore((s) => s.setNotionHasRemoteUpdates);
+  const settings = useStore((s) => s.settings);
+  const replaceNodesAndEdgesForSync = useStore((s) => s.replaceNodesAndEdgesForSync);
+
+  useEffect(() => {
+    if (
+      !notionSourceOfTruth ||
+      !notionConfig ||
+      !notionHasRemoteUpdates ||
+      syncInProgress ||
+      dirtyNodeIds.size > 0
+    )
+      return;
+
+    // Safe to auto-pull: no local conflicts
+    let cancelled = false;
+    (async () => {
+      try {
+        setSyncInProgress(true);
+        const proxy = getEffectiveProxy(notionCorsProxy);
+        const state = useStore.getState();
+        const { nodes: pulledNodes, edges: pulledEdges } = await pullFromNotionIncremental(
+          notionConfig,
+          state.lastSyncTime,
+          state.nodes,
+          state.edges,
+          proxy
+        );
+        if (cancelled) return;
+        const hasPositions = pulledNodes.some((n) => n.position.x !== 0 || n.position.y !== 0);
+        const toSet = hasPositions
+          ? { nodes: pulledNodes, edges: pulledEdges }
+          : getLayoutedElements(pulledNodes, pulledEdges, state.settings.layoutDirection);
+        replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges);
+        setLastSyncTime(new Date().toISOString());
+        setLastSyncError(null);
+        setNotionHasRemoteUpdates(false);
+      } catch (err) {
+        console.error('[Notion auto-pull] Failed:', err);
+      } finally {
+        if (!cancelled) setSyncInProgress(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [notionHasRemoteUpdates, notionSourceOfTruth, notionConfig, syncInProgress, dirtyNodeIds, notionCorsProxy, setSyncInProgress, setLastSyncTime, setLastSyncError, setNotionHasRemoteUpdates, replaceNodesAndEdgesForSync, settings]);
 };

@@ -37,6 +37,7 @@ export const Toolbar = () => {
   const syncProgress = useStore((state) => state.syncProgress);
   const notionSourceOfTruth = useStore((state) => state.notionSourceOfTruth);
   const notionDirty = useStore((state) => state.notionDirty);
+  const dirtyNodeIds = useStore((state) => state.dirtyNodeIds);
   const lastSyncError = useStore((state) => state.lastSyncError);
 
   const { saveProject, openProject } = useFileSystem();
@@ -192,8 +193,8 @@ export const Toolbar = () => {
                   : 'Синхронизация...'
                 : lastSyncError
                   ? 'Ошибка синхронизации'
-                  : notionDirty
-                    ? 'Есть несохранённые изменения — нажмите Push'
+                  : notionDirty && dirtyNodeIds.size > 0
+                    ? `${dirtyNodeIds.size} несохранённых изменений`
                     : 'Notion Sync'
             }
             aria-label="Notion Sync"
@@ -208,7 +209,7 @@ export const Toolbar = () => {
             {notionConfig && (
               <span
                 className={`text-xs font-bold leading-none ${
-                  syncInProgress ? 'text-muted' : lastSyncError ? 'text-amber-400' : notionDirty ? 'text-amber-400' : 'text-emerald-400'
+                  syncInProgress ? 'text-muted' : lastSyncError ? 'text-amber-400' : notionDirty && dirtyNodeIds.size > 0 ? 'text-amber-400' : 'text-emerald-400'
                 }`}
               >
                 {syncInProgress
@@ -217,8 +218,8 @@ export const Toolbar = () => {
                     : '...'
                   : lastSyncError
                     ? '!'
-                    : notionDirty
-                      ? '*'
+                    : notionDirty && dirtyNodeIds.size > 0
+                      ? String(dirtyNodeIds.size)
                       : '\u2713'}
               </span>
             )}

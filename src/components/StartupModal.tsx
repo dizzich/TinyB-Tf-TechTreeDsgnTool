@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Cloud, HardDrive, Loader2 } from 'lucide-react';
 import { useFileSystem } from '../hooks/useFileSystem';
 import { useStore } from '../store/useStore';
-import { pullFromNotion, NOTION_BUILTIN_PROXY } from '../utils/notionApi';
+import { pullFromNotion, pullFromNotionIncremental, NOTION_BUILTIN_PROXY } from '../utils/notionApi';
 import { getLayoutedElements } from '../utils/autoLayout';
 
 const STORAGE_KEY = 'techtree_hide_startup';
@@ -58,6 +58,8 @@ export const StartupModal = () => {
     setIsVisible(false);
   };
 
+  const lastSyncTime = useStore((state) => state.lastSyncTime);
+
   const handleOnlineMode = async () => {
     if (dontShowAgain) {
       localStorage.setItem(STORAGE_KEY, 'true');
@@ -67,10 +69,23 @@ export const StartupModal = () => {
       setLoading(true);
       setError('');
       try {
-        const { nodes: pulledNodes, edges: pulledEdges } = await pullFromNotion(
-          notionConfig,
-          NOTION_BUILTIN_PROXY
-        );
+        // Incremental pull if we have a previous sync time; full pull on first connect
+        let pulledNodes, pulledEdges;
+        if (lastSyncTime) {
+          const result = await pullFromNotionIncremental(
+            notionConfig,
+            lastSyncTime,
+            [],  // no local nodes yet (fresh open)
+            [],
+            NOTION_BUILTIN_PROXY
+          );
+          pulledNodes = result.nodes;
+          pulledEdges = result.edges;
+        } else {
+          const result = await pullFromNotion(notionConfig, NOTION_BUILTIN_PROXY);
+          pulledNodes = result.nodes;
+          pulledEdges = result.edges;
+        }
 
         const hasPositions = pulledNodes.some((n) => n.position.x !== 0 || n.position.y !== 0);
         const toSet = hasPositions

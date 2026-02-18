@@ -6,6 +6,7 @@ export const StatusBar = () => {
   const edges = useStore((s) => s.edges);
   const notionConfig = useStore((s) => s.notionConfig);
   const notionDirty = useStore((s) => s.notionDirty);
+  const dirtyNodeIds = useStore((s) => s.dirtyNodeIds);
   const notionHasRemoteUpdates = useStore((s) => s.notionHasRemoteUpdates);
   const syncInProgress = useStore((s) => s.syncInProgress);
   const syncProgress = useStore((s) => s.syncProgress);
@@ -37,7 +38,7 @@ export const StatusBar = () => {
                   ? 'text-muted'
                   : lastSyncError
                     ? 'text-amber-400'
-                    : notionDirty
+                    : notionDirty && dirtyNodeIds.size > 0
                       ? 'text-amber-400'
                       : notionHasRemoteUpdates
                         ? 'text-accent'
@@ -50,8 +51,8 @@ export const StatusBar = () => {
                   : 'Синхронизация...'
                 : lastSyncError
                   ? 'Ошибка синхронизации'
-                  : notionDirty
-                    ? 'Несохранено'
+                  : notionDirty && dirtyNodeIds.size > 0
+                    ? `${dirtyNodeIds.size} несохранено`
                     : notionHasRemoteUpdates
                       ? 'Обновления в Notion'
                       : 'Синхронизировано'}

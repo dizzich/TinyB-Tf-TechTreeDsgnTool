@@ -10,8 +10,9 @@ const getEffectiveProxy = (notionCorsProxy: string): string | undefined => {
 };
 
 /**
- * When the window regains focus and Notion is connected, check for remote updates
- * and pull them into the graph so changes made in Notion appear without reload.
+ * When the window regains focus and Notion is connected, check for remote updates.
+ * - If no local dirty nodes → auto-pull (safe to apply remote changes)
+ * - If local dirty nodes exist → just set the flag, don't overwrite
  */
 export const useNotionPullOnFocus = () => {
   const { doPull } = useNotionSyncActions();
@@ -38,7 +39,12 @@ export const useNotionPullOnFocus = () => {
           proxy
         );
         if (hasUpdates) {
-          doPullRef.current();
+          useStore.getState().setNotionHasRemoteUpdates(true);
+          // Auto-pull only if notionSourceOfTruth is enabled and no local dirty nodes
+          const current = useStore.getState();
+          if (current.notionSourceOfTruth && current.dirtyNodeIds.size === 0) {
+            doPullRef.current();
+          }
         }
       } catch {
         // Ignore errors (e.g. network) to avoid spamming
