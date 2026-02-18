@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback } from 'react';
-import { ReactFlow, Controls, Background, MiniMap, BackgroundVariant } from '@xyflow/react';
+import { ReactFlow, Controls, Background, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useStore } from '../store/useStore';
@@ -103,12 +103,6 @@ export const Graph = () => {
     [nodes, deleteNodes]
   );
 
-  const getMiniMapNodeColor = (node: any) => {
-    // Return theme-aware colors
-    if (node.selected) return theme === 'dark' ? '#6aa2ff' : '#3867d6';
-    return theme === 'dark' ? '#2c3340' : '#d7dee8';
-  };
-
   return (
     <div className="w-full h-full" onKeyDown={handleKeyDown} tabIndex={0}>
       <ReactFlow
@@ -129,10 +123,6 @@ export const Graph = () => {
           size={1}
         />
         <Controls />
-        <MiniMap
-          nodeColor={getMiniMapNodeColor}
-          maskColor={theme === 'dark' ? 'rgba(21, 23, 28, 0.7)' : 'rgba(245, 247, 251, 0.7)'}
-        />
       </ReactFlow>
     </div>
   );

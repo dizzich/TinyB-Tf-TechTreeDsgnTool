@@ -179,6 +179,105 @@ h3 {
   border: 1px solid var(--panel-border) !important;
   border-radius: 12px;
   box-shadow: var(--panel-shadow);
+  width: 240px !important;
+  height: 180px !important;
+  z-index: 10;
+}
+.react-flow__minimap-svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.minimap-overlay {
+  position: absolute;
+  z-index: 40;
+  pointer-events: auto;
+}
+
+.minimap-overlay .react-flow__panel {
+  position: static;
+  margin: 0;
+}
+
+.minimap-shell {
+  position: relative;
+}
+
+.minimap-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 1;
+}
+
+.minimap-zoom-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--control-border-muted);
+  background: var(--control-bg-muted);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.minimap-zoom-btn:hover {
+  background: var(--control-hover-bg);
+  border-color: var(--control-hover-border);
+}
+
+.minimap-zoom-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.minimap-hide-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--control-border-muted);
+  background: var(--control-bg-muted);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.minimap-hide-btn:hover {
+  background: var(--control-hover-bg);
+  border-color: var(--control-hover-border);
+}
+
+.minimap-show-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-floating);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.minimap-show-btn:hover {
+  background: var(--control-hover-bg);
+  border-color: var(--control-hover-border);
 }
 
 /* React Flow: edge theming */
