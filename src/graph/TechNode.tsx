@@ -24,15 +24,17 @@ function categoryToColor(category?: string): string {
   return CATEGORY_COLORS[Math.abs(hash) % CATEGORY_COLORS.length];
 }
 
-const TechNode = ({ data, selected }: { data: Record<string, any>; selected?: boolean }) => {
+const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected?: boolean; id?: string }) => {
   const template = useStore((state) => state.settings.nodeTemplate);
   const hasTemplate = template && template.trim().length > 0;
-  const accentColor = categoryToColor(data.category);
+  const safeData = data ?? {};
+  const accentColor = categoryToColor(safeData.category);
+  const displayLabel = safeData.label ?? safeData.techCraftId ?? safeData.outputItem ?? id ?? 'Без названия';
 
   return (
     <div
       className={clsx(
-        'rounded-[10px] border-2 min-w-[150px] max-w-[280px] transition-all bg-panel-2 text-text overflow-hidden',
+        'rounded-[10px] border-2 min-w-[200px] max-w-[320px] transition-all bg-panel-2 text-text overflow-hidden',
         selected
           ? 'border-accent shadow-[0_0_18px_rgba(106,162,255,0.35)]'
           : 'border-panel-border hover:border-control-hover-border hover:shadow-panel'
@@ -48,21 +50,25 @@ const TechNode = ({ data, selected }: { data: Record<string, any>; selected?: bo
           className="w-[3px] shrink-0"
           style={{ backgroundColor: accentColor }}
         />
-        <div className="px-3 py-2 min-w-0">
+        <div className="px-4 py-3 min-w-0">
           {hasTemplate ? (
             <div className="text-xs font-mono whitespace-pre-wrap">
-              {renderTemplate(template, data) || data.label || 'Empty Node'}
+              {(() => {
+                const rendered = renderTemplate(template, safeData);
+                const hasContent = rendered && /[\p{L}\p{N}]/u.test(rendered);
+                return hasContent ? rendered : displayLabel;
+              })()}
             </div>
           ) : (
             <>
-              <div className="text-[13px] font-semibold leading-tight truncate">
-                {data.label || 'Node'}
+              <div className="text-[15px] font-semibold leading-tight truncate">
+                {displayLabel}
               </div>
-              {(data.act || data.stage || data.category) && (
-                <div className="text-[11px] text-muted mt-0.5 truncate">
-                  {data.act && `Act ${data.act}`}
-                  {data.stage && `${data.act ? ' \u00b7 ' : ''}Stage ${data.stage}`}
-                  {data.category && `${data.act || data.stage ? ' \u00b7 ' : ''}${data.category}`}
+              {(safeData.act || safeData.stage || safeData.category) && (
+                <div className="text-[12px] text-muted mt-0.5 truncate">
+                  {safeData.act && `Act ${safeData.act}`}
+                  {safeData.stage && `${safeData.act ? ' \u00b7 ' : ''}Stage ${safeData.stage}`}
+                  {safeData.category && `${safeData.act || safeData.stage ? ' \u00b7 ' : ''}${safeData.category}`}
                 </div>
               )}
             </>

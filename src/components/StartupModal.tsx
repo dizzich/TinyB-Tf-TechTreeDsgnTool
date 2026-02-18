@@ -81,6 +81,12 @@ export const StartupModal = () => {
           );
           pulledNodes = result.nodes;
           pulledEdges = result.edges;
+          // If incremental returned very few nodes (e.g. after partial push + reload), recover with full pull
+          if (pulledNodes.length <= 1) {
+            const fullResult = await pullFromNotion(notionConfig, NOTION_BUILTIN_PROXY);
+            pulledNodes = fullResult.nodes;
+            pulledEdges = fullResult.edges;
+          }
         } else {
           const result = await pullFromNotion(notionConfig, NOTION_BUILTIN_PROXY);
           pulledNodes = result.nodes;

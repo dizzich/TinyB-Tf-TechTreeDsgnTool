@@ -91,7 +91,7 @@ interface AppState {
 
 const defaultSettings: ProjectSettings = {
   layoutDirection: 'LR',
-  nodeTemplate: '%RuName%\n%Act% %Stage% | %Category%',
+  nodeTemplate: '%label%\n%act% %stage% | %category%',
   renderSimplification: false,
 };
 
@@ -183,8 +183,9 @@ export const useStore = create<AppState>()(
       onNodesChange: (changes: NodeChange<TechNode>[]) => {
         const changedIds: string[] = [];
         for (const c of changes) {
-          if (c.type === 'position' && c.id) changedIds.push(c.id);
-          else if (c.type === 'dimensions' && c.id) changedIds.push(c.id);
+          // Only position = user actually dragged a node. Mark dirty only on drag end to avoid hundreds of store updates during multi-drag.
+          const posChange = c as { type: string; id?: string; dragging?: boolean };
+          if (c.type === 'position' && c.id && posChange.dragging === false) changedIds.push(c.id);
         }
         let newNodes = applyNodeChanges(changes, get().nodes);
         if (changedIds.length > 0) {

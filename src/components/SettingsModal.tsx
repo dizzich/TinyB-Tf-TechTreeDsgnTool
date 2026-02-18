@@ -47,15 +47,16 @@ export const SettingsModal = () => {
   };
 
   const placeholders = [
-    { key: '%RuName%', desc: 'Русское название' },
-    { key: '%Act%', desc: 'Номер акта' },
-    { key: '%Stage%', desc: 'Номер стадии' },
-    { key: '%Category%', desc: 'Название категории' },
-    { key: '%formulaResultInCraft%', desc: 'Результат крафта' },
-    { key: '%ItemInGameStatus%', desc: 'Игровой статус' },
-    { key: '%ItemDesignStatus%', desc: 'Статус дизайна' },
+    { key: '%label%', desc: 'Название узла' },
+    { key: '%act%', desc: 'Номер акта' },
+    { key: '%stage%', desc: 'Номер стадии' },
+    { key: '%category%', desc: 'Название категории' },
+    { key: '%techCraftId%', desc: 'TechCraft ID' },
+    { key: '%outputItem%', desc: 'Результат крафта' },
+    { key: '%gameStatus%', desc: 'Игровой статус' },
+    { key: '%designStatus%', desc: 'Статус дизайна' },
     { key: '%formulaIngridients%', desc: 'Ингредиенты' },
-    { key: '%formulaCraftStation%', desc: 'Станция крафта' },
+    { key: '%formulaUsedStation%', desc: 'Станция крафта' },
   ];
 
   return (
@@ -189,10 +190,10 @@ export const SettingsModal = () => {
                     setLocalSettings({ ...localSettings, nodeTemplate: e.target.value })
                   }
                   className={`${inputClass} h-32 resize-none font-mono`}
-                  placeholder="%RuName%\n%Act% %Stage% | %Category%"
+                  placeholder="%label%\n%act% %stage% | %category%"
                 />
                 <p className="mt-1 text-xs text-muted">
-                  Используйте заполнители типа %RuName%, %Act% и т.д. Неизвестные заполнители будут пустыми.
+                  Используйте заполнители типа %label%, %act% и т.д. по полям NodeData. Неизвестные — пустые.
                 </p>
               </div>
 
@@ -213,7 +214,7 @@ export const SettingsModal = () => {
               <div className="bg-panel-2 border border-panel-border rounded-control p-3">
                 <h4 className="text-xs font-semibold text-text mb-1">Пример:</h4>
                 <pre className="text-xs font-mono text-muted whitespace-pre-wrap">
-                  {localSettings.nodeTemplate || '%RuName%\n%Act% %Stage% | %Category%'}
+                  {localSettings.nodeTemplate || '%label%\n%act% %stage% | %category%'}
                 </pre>
               </div>
             </div>

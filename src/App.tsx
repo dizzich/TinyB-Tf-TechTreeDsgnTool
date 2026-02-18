@@ -13,6 +13,7 @@ import { StatusBar } from './components/StatusBar';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useNotionAutoSave } from './hooks/useNotionAutoSave';
 import { useNotionPullOnFocus } from './hooks/useNotionPullOnFocus';
+import { useNotionPolling } from './hooks/useNotionPolling';
 import { useStore } from './store/useStore';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -20,7 +21,8 @@ function App() {
   useKeyboardShortcuts();
   useNotionAutoSave();
   useNotionPullOnFocus();
-  
+  useNotionPolling();
+
   const theme = useStore((state) => state.ui.theme);
   const sidebarOpen = useStore((state) => state.ui.sidebarOpen);
   const inspectorOpen = useStore((state) => state.ui.inspectorOpen);

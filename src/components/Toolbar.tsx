@@ -179,11 +179,11 @@ export const Toolbar = () => {
 
         <div className="h-5 w-px bg-panel-border mx-1" aria-hidden />
 
-        <div className="relative flex items-center" ref={notionMenuRef}>
+        <div className="relative flex items-center min-w-[7.5rem]" ref={notionMenuRef}>
           <button
             type="button"
             onClick={() => setModalOpen('notionSync', true)}
-            className={`${iconBtnClass} flex items-center gap-1 rounded-r-none -mr-px ${
+            className={`${iconBtnClass} w-auto min-w-[6.5rem] px-2 flex items-center gap-1.5 rounded-r-none -mr-px ${
               notionConfig ? 'text-accent border-accent/50 shadow-[0_0_5px_rgba(106,162,255,0.2)]' : ''
             } ${canSync ? '' : 'rounded-r-control'}`}
             title={

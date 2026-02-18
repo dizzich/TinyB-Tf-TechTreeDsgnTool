@@ -14,8 +14,8 @@ export const getLayoutedElements = (nodes: TechNode[], edges: TechEdge[], direct
     // For now, we'll assume a fixed size or try to read it if available (measured).
     // React Flow nodes have `measured` property if they are rendered.
     // Fallback to a default size.
-    const width = (node as any).measured?.width || 180;
-    const height = (node as any).measured?.height || 80;
+    const width = (node as any).measured?.width || 200;
+    const height = (node as any).measured?.height || 70;
     dagreGraph.setNode(node.id, { width, height });
   });
 
@@ -29,8 +29,8 @@ export const getLayoutedElements = (nodes: TechNode[], edges: TechEdge[], direct
     const nodeWithPosition = dagreGraph.node(node.id);
     
     // Dagre gives center point, React Flow expects top-left
-    const width = (node as any).measured?.width || 180;
-    const height = (node as any).measured?.height || 80;
+    const width = (node as any).measured?.width || 200;
+    const height = (node as any).measured?.height || 70;
 
     return {
       ...node,

@@ -28,6 +28,9 @@ const NOTION_BASE = 'https://api.notion.com/v1';
 /** Value for "use built-in proxy" (Vite dev server proxies /api/notion to Notion). Only works when running via `npm run dev`. */
 export const NOTION_BUILTIN_PROXY = '__builtin__';
 
+/** Notion API rounds last_edited_time to the nearest minute. Use this buffer so we detect and fetch edits that fall in the same minute as lastSyncTime. */
+const NOTION_TIME_BUFFER_MS = 90_000;
+
 const NOTION_NETWORK_ERROR_MSG =
   "Cannot reach Notion. If you're running in the browser, set a CORS proxy in the Notion Sync settings or use the built-in proxy (dev only).";
 
@@ -202,7 +205,7 @@ export const checkForNotionUpdates = async (
   if (!lastSyncTime) return { hasUpdates: true, lastEditedTime: lastEdited };
   const remoteTime = new Date(lastEdited).getTime();
   const localTime = new Date(lastSyncTime).getTime();
-  return { hasUpdates: remoteTime > localTime, lastEditedTime: lastEdited };
+  return { hasUpdates: remoteTime >= localTime - NOTION_TIME_BUFFER_MS, lastEditedTime: lastEdited };
 };
 
 /** Extract plain text from a Notion rich_text array */
@@ -440,8 +443,8 @@ const pullChangedPagesAsRemote = async (
   corsProxy?: string
 ): Promise<{ nodes: TechNode[]; edges: TechEdge[] }> => {
   const options: NotionApiOptions = { apiKey: config.apiKey, corsProxy };
-  // Use on_or_after and subtract 1s to catch edits at the boundary
-  const adjustedTime = new Date(new Date(lastSyncTime).getTime() - 1000).toISOString();
+  // Notion API has minute-level precision for last_edited_time; use buffer so we include edits in the same minute as lastSyncTime
+  const adjustedTime = new Date(new Date(lastSyncTime).getTime() - NOTION_TIME_BUFFER_MS).toISOString();
   const filter = {
     timestamp: 'last_edited_time' as const,
     last_edited_time: { on_or_after: adjustedTime },
