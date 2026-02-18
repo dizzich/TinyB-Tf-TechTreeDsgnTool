@@ -62,7 +62,7 @@ export const Graph = () => {
         deleteKeyCode={null} // Disable default delete behavior, we handle it ourselves
         defaultEdgeOptions={{
           type: 'smoothstep',
-          style: { stroke: 'var(--panel-border)', strokeWidth: 1.5 },
+          style: { stroke: 'var(--edge-stroke)', strokeWidth: 2 },
         }}
       >
         <Background

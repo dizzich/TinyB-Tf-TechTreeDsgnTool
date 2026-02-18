@@ -16,6 +16,8 @@
   --danger: #e36f6f;
 
   --panel-border: #2c3340;
+  --edge-stroke: #4a5568;
+  --notion-doc-fill: #242832;
   --divider: #323845;
 
   --control-bg: #151920;
@@ -61,6 +63,8 @@ body.theme-light {
   --danger: #d63031;
 
   --panel-border: #d7dee8;
+  --edge-stroke: #8b95a6;
+  --notion-doc-fill: #ffffff;
   --divider: #e1e6ed;
 
   --control-bg: #ffffff;
@@ -179,7 +183,8 @@ h3 {
 
 /* React Flow: edge theming */
 .react-flow__edge-path {
-  stroke: var(--panel-border);
+  stroke: var(--edge-stroke);
+  stroke-width: 2;
 }
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--accent);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Cloud, HardDrive, Loader2 } from 'lucide-react';
+import { HardDrive, Loader2 } from 'lucide-react';
+import { NotionIcon } from './NotionIcon';
 import { useFileSystem } from '../hooks/useFileSystem';
 import { useStore } from '../store/useStore';
 import { pullFromNotion, pullFromNotionIncremental, NOTION_BUILTIN_PROXY } from '../utils/notionApi';
@@ -70,7 +71,7 @@ export const StartupModal = () => {
       setError('');
       try {
         // Incremental pull if we have a previous sync time; full pull on first connect
-        let pulledNodes, pulledEdges;
+        let pulledNodes, pulledEdges, notionFieldColors, replaceColors;
         if (lastSyncTime) {
           const result = await pullFromNotionIncremental(
             notionConfig,
@@ -81,23 +82,29 @@ export const StartupModal = () => {
           );
           pulledNodes = result.nodes;
           pulledEdges = result.edges;
+          notionFieldColors = result.notionFieldColors;
+          replaceColors = false;
           // If incremental returned very few nodes (e.g. after partial push + reload), recover with full pull
           if (pulledNodes.length <= 1) {
             const fullResult = await pullFromNotion(notionConfig, NOTION_BUILTIN_PROXY);
             pulledNodes = fullResult.nodes;
             pulledEdges = fullResult.edges;
+            notionFieldColors = fullResult.notionFieldColors;
+            replaceColors = true;
           }
         } else {
           const result = await pullFromNotion(notionConfig, NOTION_BUILTIN_PROXY);
           pulledNodes = result.nodes;
           pulledEdges = result.edges;
+          notionFieldColors = result.notionFieldColors;
+          replaceColors = true;
         }
 
         const hasPositions = pulledNodes.some((n) => n.position.x !== 0 || n.position.y !== 0);
         const toSet = hasPositions
           ? { nodes: pulledNodes, edges: pulledEdges }
           : getLayoutedElements(pulledNodes, pulledEdges, settings.layoutDirection);
-        replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges);
+        replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges, notionFieldColors, replaceColors);
 
         setNotionConnected(true);
         setNotionSourceOfTruth(true);
@@ -165,7 +172,7 @@ export const StartupModal = () => {
           <div className={cardClass}>
             <div className="flex flex-col items-center text-center space-y-4">
               <div className="w-16 h-16 bg-control-bg-muted rounded-full flex items-center justify-center border border-control-border-muted">
-                <Cloud size={32} className="text-accent" strokeWidth={1.75} />
+                <NotionIcon size={32} color="var(--accent)" docFill="var(--control-bg-muted)" />
               </div>
               <h2 className="text-lg font-semibold text-text">Notion</h2>
               <p className="text-sm text-muted">

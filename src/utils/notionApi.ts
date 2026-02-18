@@ -127,6 +127,23 @@ const notionFetch = async (
   }
 };
 
+/** Retrieve a page by ID and return its title (first title property). Returns "" on error or 404. */
+export const retrievePageTitle = async (
+  pageId: string,
+  options: NotionApiOptions
+): Promise<string> => {
+  try {
+    const page = await notionFetch(`/pages/${pageId}`, options);
+    const props = page?.properties;
+    if (!props || typeof props !== 'object') return '';
+    const titleProp = Object.values(props).find((p: any) => p?.type === 'title');
+    if (!titleProp?.title) return '';
+    return getPlainText(titleProp.title);
+  } catch {
+    return '';
+  }
+};
+
 /** Query all pages from a Notion database (handles pagination) */
 export const queryAllPages = async (
   databaseId: string,
@@ -220,16 +237,145 @@ const getTitleText = (titleProp: any): string => {
   return getPlainText(titleProp.title);
 };
 
+/** Notion named colors → hex (for select/status chips) */
+const NOTION_COLOR_TO_HEX: Record<string, string> = {
+  default: '#9ca3af',
+  gray: '#9ca3af',
+  brown: '#92400e',
+  orange: '#ea580c',
+  yellow: '#ca8a04',
+  green: '#16a34a',
+  blue: '#2563eb',
+  purple: '#7c3aed',
+  pink: '#db2777',
+  red: '#dc2626',
+};
+
+function notionColorToHex(color?: string): string | undefined {
+  if (!color) return undefined;
+  return NOTION_COLOR_TO_HEX[color] ?? undefined;
+}
+
 /** Extract select value */
 const getSelectValue = (selectProp: any): string => {
   return selectProp?.select?.name || '';
 };
+
+/** Extract select value and Notion color. Returns [value, hexColor] */
+function getSelectValueAndColor(selectProp: any): { value: string; color?: string } {
+  const sel = selectProp?.select;
+  if (!sel?.name) return { value: '' };
+  return {
+    value: sel.name,
+    color: notionColorToHex(sel.color),
+  };
+}
+
+/** Extract first value from multi_select */
+const getMultiSelectValue = (prop: any): string => {
+  const arr = prop?.multi_select;
+  if (!Array.isArray(arr) || arr.length === 0) return '';
+  return arr[0]?.name || '';
+};
+
+/** Extract first multi_select value and color */
+function getMultiSelectValueAndColor(prop: any): { value: string; color?: string } {
+  const arr = prop?.multi_select;
+  if (!Array.isArray(arr) || arr.length === 0) return { value: '' };
+  const first = arr[0];
+  return {
+    value: first?.name || '',
+    color: notionColorToHex(first?.color),
+  };
+}
+
+/** Extract status value */
+const getStatusValue = (prop: any): string => {
+  return prop?.status?.name || '';
+};
+
+/** Extract status value and color */
+function getStatusValueAndColor(prop: any): { value: string; color?: string } {
+  const st = prop?.status;
+  if (!st?.name) return { value: '' };
+  return {
+    value: st.name,
+    color: notionColorToHex(st.color),
+  };
+}
 
 /** Extract relation IDs */
 const getRelationIds = (relationProp: any): string[] => {
   if (!relationProp?.relation) return [];
   return relationProp.relation.map((r: any) => r.id);
 };
+
+/** Extract string from a Notion formula property */
+const getFormulaValue = (prop: any): string => {
+  if (!prop?.formula) return '';
+  const f = prop.formula;
+  if (f.type === 'string' && f.string) return f.string;
+  if (f.type === 'number' && f.number != null) return String(f.number);
+  if (f.type === 'boolean') return String(f.boolean);
+  if (f.type === 'date' && f.date) return f.date.start || '';
+  return '';
+};
+
+/** Get single value from a rollup array item (select, multi_select, status, title, rich_text) */
+function getRollupItemValue(item: any): string {
+  if (!item) return '';
+  if (item.type === 'select' && item.select?.name) return item.select.name;
+  if (item.type === 'multi_select' && Array.isArray(item.multi_select) && item.multi_select[0]?.name) return item.multi_select[0].name;
+  if (item.type === 'status' && item.status?.name) return item.status.name;
+  if (item.type === 'title' && item.title) return getPlainText(item.title);
+  if (item.type === 'rich_text' && item.rich_text) return getPlainText(item.rich_text);
+  return '';
+}
+
+/** Extract first non-empty value from a Notion rollup of type "array" (e.g. CategoryFromItem rollup via Relation) */
+const getRollupArrayValue = (prop: any): string => {
+  if (prop?.type !== 'rollup' || prop?.rollup?.type !== 'array' || !Array.isArray(prop.rollup.array)) {
+    return '';
+  }
+  for (const item of prop.rollup.array) {
+    const v = getRollupItemValue(item);
+    if (v) return v;
+  }
+  return '';
+};
+
+/** Extract all non-empty values from a Notion rollup array and join with ", " (e.g. OpenCondition rollup) */
+const getRollupArrayAllValues = (prop: any): string => {
+  if (prop?.type !== 'rollup' || prop?.rollup?.type !== 'array' || !Array.isArray(prop.rollup.array)) {
+    return '';
+  }
+  const values = prop.rollup.array.map((item: any) => getRollupItemValue(item)).filter(Boolean);
+  return values.join(', ');
+};
+
+/** Extract first value+color from a Notion rollup of type "array" (e.g. Category from Relation rollup) */
+function getRollupArrayValueAndColor(prop: any): { value: string; color?: string } | null {
+  if (prop?.type !== 'rollup' || prop?.rollup?.type !== 'array' || !Array.isArray(prop.rollup.array)) {
+    return null;
+  }
+  for (const item of prop.rollup.array) {
+    if (!item) continue;
+    if (item.type === 'select' && item.select?.name) {
+      const color = notionColorToHex(item.select.color);
+      return { value: item.select.name, color };
+    }
+    if (item.type === 'multi_select' && Array.isArray(item.multi_select) && item.multi_select[0]) {
+      const first = item.multi_select[0];
+      const color = notionColorToHex(first.color);
+      return { value: first.name || '', color };
+    }
+    if (item.type === 'status' && item.status?.name) {
+      const color = notionColorToHex(item.status.color);
+      return { value: item.status.name, color };
+    }
+  }
+  return null;
+}
 
 /** Parse an EditorPosition rich_text value into {x, y} or undefined */
 const parseEditorPosition = (posText: string): { x: number; y: number } | undefined => {
@@ -249,10 +395,33 @@ const parseEditorPosition = (posText: string): { x: number; y: number } | undefi
   return undefined;
 };
 
+/** Resolve openCondition from page props: rich_text, formula, relation (with id→title map), rollup (all values), select, status, title */
+function resolveOpenCondition(
+  prop: any,
+  relationIdToTitle?: Map<string, string>
+): string {
+  if (!prop) return '';
+  const rich = getPlainText(prop?.rich_text || []);
+  if (rich) return rich;
+  const formula = getFormulaValue(prop);
+  if (formula) return formula;
+  if (relationIdToTitle && prop?.type === 'relation' && prop?.relation) {
+    const ids = getRelationIds(prop);
+    const titles = ids.map((id) => relationIdToTitle.get(id) ?? id).filter(Boolean);
+    if (titles.length) return titles.join(', ');
+  }
+  const rollupAll = getRollupArrayAllValues(prop);
+  if (rollupAll) return rollupAll;
+  const sel = getSelectValue(prop) || getStatusValue(prop);
+  if (sel) return sel;
+  return getTitleText(prop) || '';
+}
+
 /** Convert a Notion page to NodeData + notionPageId + optional position */
 export const notionPageToNodeData = (
   page: any,
-  config: NotionConfig
+  config: NotionConfig,
+  relationIdToTitle?: Map<string, string>
 ): { notionPageId: string; data: NodeData; position?: { x: number; y: number } } => {
   const props = page.properties;
   const cm = config.columnMapping;
@@ -275,11 +444,28 @@ export const notionPageToNodeData = (
     notionPageId: page.id,
     act: getSelectValue(props[cm.actAndStage]) || getPlainText(props[cm.actAndStage]?.rich_text || []),
     stage: getSelectValue(props[cm.actStage]) || getPlainText(props[cm.actStage]?.rich_text || []),
-    category: getSelectValue(props[cm.category]) || getPlainText(props[cm.category]?.rich_text || []),
-    powerType: getSelectValue(props[cm.powerType]),
-    gameStatus: getSelectValue(props[cm.gameStatus]),
-    designStatus: getSelectValue(props[cm.designStatus]),
-    notionSyncStatus: getSelectValue(props[cm.notionSyncStatus]),
+    category: cm.category ? (getSelectValue(props[cm.category]) || getMultiSelectValue(props[cm.category]) || getStatusValue(props[cm.category]) || getRollupArrayValue(props[cm.category]) || getPlainText(props[cm.category]?.rich_text || []) || getFormulaValue(props[cm.category]) || '') : undefined,
+    powerType: getSelectValue(props[cm.powerType]) || getStatusValue(props[cm.powerType]) || getRollupArrayValue(props[cm.powerType]),
+    gameStatus: getSelectValue(props[cm.gameStatus]) || getStatusValue(props[cm.gameStatus]),
+    designStatus: getSelectValue(props[cm.designStatus]) || getStatusValue(props[cm.designStatus]),
+    notionSyncStatus: getSelectValue(props[cm.notionSyncStatus]) || getStatusValue(props[cm.notionSyncStatus]),
+    ...(cm.openCondition
+      ? (() => {
+          const prop = props[cm.openCondition];
+          const openCondition = resolveOpenCondition(prop, relationIdToTitle) || '';
+          const openConditionRefs =
+            relationIdToTitle && prop?.type === 'relation' && prop?.relation
+              ? getRelationIds(prop).map((id) => ({
+                  name: relationIdToTitle.get(id) ?? id,
+                  pageId: id,
+                }))
+              : undefined;
+          return {
+            openCondition,
+            ...(openConditionRefs?.length ? { openConditionRefs } : {}),
+          };
+        })()
+      : {}),
     createdAt: page.created_time,
     updatedAt: page.last_edited_time,
   };
@@ -287,14 +473,105 @@ export const notionPageToNodeData = (
   return { notionPageId: page.id, data, position };
 };
 
+/** Field keys we use in NodeData → Notion column mapping keys */
+const FIELD_TO_COLUMN: Record<string, string> = {
+  act: 'actAndStage',
+  stage: 'actStage',
+  category: 'category',
+  powerType: 'powerType',
+  gameStatus: 'gameStatus',
+  designStatus: 'designStatus',
+  notionSyncStatus: 'notionSyncStatus',
+  openCondition: 'openCondition',
+};
+
+/** Extract value+color from a Notion property. Tries select, multi_select, status, rollup (array). */
+function extractValueAndColor(prop: any): { value: string; color?: string } | null {
+  if (!prop) return null;
+  const sel = getSelectValueAndColor(prop);
+  if (sel.value && sel.color) return sel;
+  const multi = getMultiSelectValueAndColor(prop);
+  if (multi.value && multi.color) return multi;
+  const status = getStatusValueAndColor(prop);
+  if (status.value && status.color) return status;
+  const rollup = getRollupArrayValueAndColor(prop);
+  if (rollup?.value && rollup.color) return rollup;
+  return null;
+}
+
+/** Build notionFieldColors from pages. Maps fieldKey -> { value -> hexColor } */
+export function buildNotionFieldColors(
+  pages: any[],
+  config: NotionConfig
+): Record<string, Record<string, string>> {
+  const cm = config.columnMapping;
+  const result: Record<string, Record<string, string>> = {};
+
+  const tryAdd = (fieldKey: string, props: any) => {
+    const col = FIELD_TO_COLUMN[fieldKey] ?? fieldKey;
+    const colName = (cm as any)[col];
+    if (!colName || !props || !props[colName]) return;
+    const extracted = extractValueAndColor(props[colName]);
+    if (extracted?.value && extracted.color) {
+      if (!result[fieldKey]) result[fieldKey] = {};
+      result[fieldKey][extracted.value] = extracted.color;
+    }
+  };
+
+  for (const page of pages) {
+    const props = page.properties || {};
+    tryAdd('act', props);
+    tryAdd('stage', props);
+    tryAdd('category', props);
+    tryAdd('powerType', props);
+    tryAdd('gameStatus', props);
+    tryAdd('designStatus', props);
+    tryAdd('notionSyncStatus', props);
+    tryAdd('openCondition', props);
+  }
+
+  return result;
+}
+
+const OPEN_CONDITION_FETCH_BATCH_SIZE = 10;
+
+/** Collect all unique relation IDs from openCondition props and fetch their page titles. Returns id → title map. */
+async function fetchOpenConditionRelationIdToTitle(
+  pages: any[],
+  config: NotionConfig,
+  options: NotionApiOptions
+): Promise<Map<string, string>> {
+  const cm = config.columnMapping;
+  if (!cm.openCondition) return new Map();
+  const ids = new Set<string>();
+  for (const page of pages) {
+    const prop = page.properties?.[cm.openCondition];
+    if (prop?.type === 'relation') {
+      getRelationIds(prop).forEach((id) => ids.add(id));
+    }
+  }
+  const map = new Map<string, string>();
+  const arr = Array.from(ids);
+  for (let i = 0; i < arr.length; i += OPEN_CONDITION_FETCH_BATCH_SIZE) {
+    const chunk = arr.slice(i, i + OPEN_CONDITION_FETCH_BATCH_SIZE);
+    const titles = await Promise.all(chunk.map((id) => retrievePageTitle(id, options)));
+    chunk.forEach((id, j) => {
+      if (titles[j]) map.set(id, titles[j]);
+    });
+  }
+  return map;
+}
+
 /** Pull all data from Notion DB and convert to nodes + edges */
 export const pullFromNotion = async (
   config: NotionConfig,
   corsProxy?: string
-): Promise<{ nodes: TechNode[]; edges: TechEdge[] }> => {
+): Promise<{ nodes: TechNode[]; edges: TechEdge[]; notionFieldColors: Record<string, Record<string, string>> }> => {
   const options: NotionApiOptions = { apiKey: config.apiKey, corsProxy };
   const pages = await queryAllPages(config.databaseId, options);
   const cm = config.columnMapping;
+  const notionFieldColors = buildNotionFieldColors(pages, config);
+  const relationIdToTitle = await fetchOpenConditionRelationIdToTitle(pages, config, options);
 
   const nodes: TechNode[] = [];
   const edges: TechEdge[] = [];
@@ -304,7 +581,7 @@ export const pullFromNotion = async (
   const techCraftIdToNodeId = new Map<string, string>(); // TechCraftID → node ID
 
   pages.forEach((page, index) => {
-    const { notionPageId, data, position } = notionPageToNodeData(page, config);
+    const { notionPageId, data, position } = notionPageToNodeData(page, config, relationIdToTitle);
     const nodeId = data.techCraftId || `notion-${index}`;
 
     pageIdToNodeId.set(notionPageId, nodeId);
@@ -366,21 +643,22 @@ export const pullFromNotion = async (
     i === self.findIndex(t => t.source === edge.source && t.target === edge.target)
   );
 
-  return { nodes, edges: uniqueEdges };
+  return { nodes, edges: uniqueEdges, notionFieldColors };
 };
 
 /** Convert raw pages to nodes + edges (shared logic). pageIdToNodeId is pre-filled from local; pulled nodes use existing id when matching. */
 const pagesToNodesAndEdges = (
   pages: any[],
   config: NotionConfig,
-  pageIdToNodeId: Map<string, string>
-): { nodes: TechNode[]; edges: TechEdge[] } => {
+  pageIdToNodeId: Map<string, string>,
+  relationIdToTitle?: Map<string, string>
+): { nodes: TechNode[]; edges: TechEdge[]; notionFieldColors: Record<string, Record<string, string>> } => {
   const cm = config.columnMapping;
   const nodes: TechNode[] = [];
   const edges: TechEdge[] = [];
 
   pages.forEach((page, index) => {
-    const { notionPageId, data, position } = notionPageToNodeData(page, config);
+    const { notionPageId, data, position } = notionPageToNodeData(page, config, relationIdToTitle);
     const nodeId = pageIdToNodeId.get(notionPageId) ?? data.techCraftId ?? `notion-${index}`;
     pageIdToNodeId.set(notionPageId, nodeId);
 
@@ -432,7 +710,8 @@ const pagesToNodesAndEdges = (
   const uniqueEdges = edges.filter((edge, i, self) =>
     i === self.findIndex((t) => t.source === edge.source && t.target === edge.target)
   );
-  return { nodes, edges: uniqueEdges };
+  const notionFieldColors = buildNotionFieldColors(pages, config);
+  return { nodes, edges: uniqueEdges, notionFieldColors };
 };
 
 /** Fetch changed pages as nodes/edges (no merge). Used by pullFromNotionIncremental and bidirectionalSync. */
@@ -441,16 +720,15 @@ const pullChangedPagesAsRemote = async (
   lastSyncTime: string,
   localNodes: TechNode[],
   corsProxy?: string
-): Promise<{ nodes: TechNode[]; edges: TechEdge[] }> => {
+): Promise<{ nodes: TechNode[]; edges: TechEdge[]; notionFieldColors: Record<string, Record<string, string>> }> => {
   const options: NotionApiOptions = { apiKey: config.apiKey, corsProxy };
-  // Notion API has minute-level precision for last_edited_time; use buffer so we include edits in the same minute as lastSyncTime
   const adjustedTime = new Date(new Date(lastSyncTime).getTime() - NOTION_TIME_BUFFER_MS).toISOString();
   const filter = {
     timestamp: 'last_edited_time' as const,
     last_edited_time: { on_or_after: adjustedTime },
   };
   const pages = await queryPagesFiltered(config.databaseId, options, filter);
-  if (pages.length === 0) return { nodes: [], edges: [] };
+  if (pages.length === 0) return { nodes: [], edges: [], notionFieldColors: {} };
 
   const pageIdToNodeId = new Map<string, string>();
   localNodes.forEach((n) => {
@@ -458,7 +736,8 @@ const pullChangedPagesAsRemote = async (
     if (n.data.techCraftId) pageIdToNodeId.set(n.data.techCraftId, n.id);
   });
 
-  return pagesToNodesAndEdges(pages, config, pageIdToNodeId);
+  const relationIdToTitle = await fetchOpenConditionRelationIdToTitle(pages, config, options);
+  return pagesToNodesAndEdges(pages, config, pageIdToNodeId, relationIdToTitle);
 };
 
 /** Incremental pull: fetch only pages edited after lastSyncTime and merge with local */
@@ -468,20 +747,19 @@ export const pullFromNotionIncremental = async (
   localNodes: TechNode[],
   localEdges: TechEdge[],
   corsProxy?: string
-): Promise<{ nodes: TechNode[]; edges: TechEdge[] }> => {
+): Promise<{ nodes: TechNode[]; edges: TechEdge[]; notionFieldColors: Record<string, Record<string, string>> }> => {
   if (!lastSyncTime) {
     return pullFromNotion(config, corsProxy);
   }
 
-  const { nodes: pulledNodes, edges: pulledEdges } = await pullChangedPagesAsRemote(
+  const { nodes: pulledNodes, edges: pulledEdges, notionFieldColors: pulledColors } = await pullChangedPagesAsRemote(
     config,
     lastSyncTime,
     localNodes,
     corsProxy
   );
-  // No changes: return local state with new refs (no full pull to avoid scanning all)
   if (pulledNodes.length === 0) {
-    return { nodes: [...localNodes], edges: [...localEdges] };
+    return { nodes: [...localNodes], edges: [...localEdges], notionFieldColors: pulledColors };
   }
 
   const pulledNodeIds = new Set(pulledNodes.map((n) => n.id));
@@ -519,7 +797,7 @@ export const pullFromNotionIncremental = async (
       i === self.findIndex((t) => t.source === edge.source && t.target === edge.target)
   );
 
-  return { nodes: mergedNodes, edges: mergedEdges };
+  return { nodes: mergedNodes, edges: mergedEdges, notionFieldColors: pulledColors };
 };
 
 /** Run async tasks with a concurrency limit (e.g. 3 parallel Notion API calls) */
@@ -581,6 +859,11 @@ const buildNotionProperties = (
   }
   if (data.notionSyncStatus) {
     props[cm.notionSyncStatus] = { select: { name: data.notionSyncStatus } };
+  }
+  if (cm.openCondition && data.openCondition) {
+    props[cm.openCondition] = {
+      rich_text: [{ text: { content: data.openCondition } }],
+    };
   }
 
   // Relations: PrevTechs — O(1) lookups via nodeMap
@@ -703,6 +986,7 @@ export const bidirectionalSync = async (
   mergedNodes: TechNode[];
   mergedEdges: TechEdge[];
   result: SyncResult;
+  notionFieldColors: Record<string, Record<string, string>>;
 }> => {
   const result: SyncResult = { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] };
 
@@ -711,7 +995,7 @@ export const bidirectionalSync = async (
     : await pullFromNotion(config, corsProxy);
 
   if (lastSyncTime && remote.nodes.length === 0) {
-    return { mergedNodes: localNodes, mergedEdges: localEdges, result };
+    return { mergedNodes: localNodes, mergedEdges: localEdges, result, notionFieldColors: remote.notionFieldColors || {} };
   }
 
   // Build lookup maps
@@ -789,7 +1073,7 @@ export const bidirectionalSync = async (
     i === self.findIndex(t => t.source === edge.source && t.target === edge.target)
   );
 
-  return { mergedNodes, mergedEdges, result };
+  return { mergedNodes, mergedEdges, result, notionFieldColors: remote.notionFieldColors || {} };
 };
 
 /** Test Notion API connection by fetching database info */

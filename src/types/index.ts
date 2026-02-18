@@ -66,6 +66,8 @@ export interface NodeData {
   techForAct?: string;
   /** Open condition text */
   openCondition?: string;
+  /** Open conditions as Notion refs (when source is Relation); used for links to Notion */
+  openConditionRefs?: NotionRef[];
   /** Item looting in act */
   itemLootingInAct?: string;
   /** Electric cost */
@@ -143,6 +145,8 @@ export interface NotionColumnMapping {
   notionSyncStatus: string;
   /** Notion property (rich_text) → Editor node position as JSON {"x":num,"y":num} */
   editorPosition: string;
+  /** Notion property (rich_text) → OpenCondition */
+  openCondition?: string;
 }
 
 export type SyncDirection = 'pull' | 'push' | 'bidirectional';
@@ -173,10 +177,24 @@ export interface ImportMapping {
   nextTechsColumn?: string; // Outgoing relations (NextTechs)
 }
 
+export type NodeColorBy = 'category' | 'stage' | 'act' | 'powerType' | 'gameStatus' | 'openCondition';
+
+export const DEFAULT_NODE_COLOR_PALETTE = [
+  '#6aa2ff', '#a78bfa', '#f59e42', '#34d399',
+  '#f472b6', '#fbbf24', '#38bdf8', '#e36f6f',
+];
+
+/** Explicit value → color mapping. Keys are attribute values (empty string = no value). */
+export type NodeColorMap = Record<string, string>;
+
 export interface ProjectSettings {
   layoutDirection: 'LR' | 'TB';
   nodeTemplate: string;
   renderSimplification: boolean;
+  nodeColorBy?: NodeColorBy;
+  nodeColorPalette?: string[];
+  /** Explicit value-to-color mapping. Overrides hash when set. */
+  nodeColorMap?: NodeColorMap;
 }
 
 export interface ProjectMeta {
@@ -185,10 +203,14 @@ export interface ProjectMeta {
   version: string;
 }
 
+/** Notion field value → hex color (from Notion select/status options) */
+export type NotionFieldColors = Record<string, Record<string, string>>;
+
 export interface ProjectFile {
   version: string;
   meta: ProjectMeta;
   settings: ProjectSettings;
   nodes: TechNode[];
   edges: TechEdge[];
+  notionFieldColors?: NotionFieldColors;
 }

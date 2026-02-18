@@ -11,7 +11,7 @@ import {
   OnEdgesChange,
   OnConnect,
 } from '@xyflow/react';
-import { TechNode, TechEdge, ProjectMeta, ProjectSettings, NotionConfig, SyncResult } from '../types';
+import { TechNode, TechEdge, ProjectMeta, ProjectSettings, NotionConfig, SyncResult, DEFAULT_NODE_COLOR_PALETTE } from '../types';
 
 const NOTION_STORAGE_KEY = 'techtree_notion_config';
 const THEME_STORAGE_KEY = 'techtree_theme';
@@ -36,6 +36,7 @@ interface AppState {
   notionHasRemoteUpdates: boolean;
   dirtyNodeIds: Set<string>;
   syncJustCompleted: boolean;
+  notionFieldColors: Record<string, Record<string, string>>;
 
   // UI State
   ui: {
@@ -48,6 +49,7 @@ interface AppState {
     settings: boolean;
     export: boolean;
     notionSync: boolean;
+    colorMapping: boolean;
   };
 
   // Actions
@@ -56,8 +58,13 @@ interface AppState {
   onConnect: OnConnect;
   setNodes: (nodes: TechNode[]) => void;
   setEdges: (edges: TechEdge[]) => void;
-  /** Replace nodes/edges from sync (Pull). Clears temporal history and forces new refs. */
-  replaceNodesAndEdgesForSync: (nodes: TechNode[], edges: TechEdge[]) => void;
+  /** Replace nodes/edges from sync (Pull). Optionally merge/replace notionFieldColors. */
+  replaceNodesAndEdgesForSync: (
+    nodes: TechNode[],
+    edges: TechEdge[],
+    notionFieldColors?: Record<string, Record<string, string>>,
+    replaceColors?: boolean
+  ) => void;
   addNode: (node: TechNode) => void;
   deleteNodes: (nodeIds: string[]) => void;
   updateNodeData: (id: string, data: any) => void;
@@ -81,7 +88,7 @@ interface AppState {
   clearDirtyNodes: () => void;
   setSyncJustCompleted: (value: boolean) => void;
 
-  setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync', isOpen: boolean) => void;
+  setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync' | 'colorMapping', isOpen: boolean) => void;
   
   // UI Actions
   toggleSidebar: () => void;
@@ -93,6 +100,8 @@ const defaultSettings: ProjectSettings = {
   layoutDirection: 'LR',
   nodeTemplate: '%label%\n%act% %stage% | %category%',
   renderSimplification: false,
+  nodeColorBy: 'category',
+  nodeColorPalette: [...DEFAULT_NODE_COLOR_PALETTE],
 };
 
 const defaultMeta: ProjectMeta = {
@@ -166,6 +175,7 @@ export const useStore = create<AppState>()(
       notionHasRemoteUpdates: false,
       dirtyNodeIds: new Set<string>(),
       syncJustCompleted: false,
+      notionFieldColors: {},
 
       ui: {
         sidebarOpen: true,
@@ -178,6 +188,7 @@ export const useStore = create<AppState>()(
         settings: false,
         export: false,
         notionSync: false,
+        colorMapping: false,
       },
 
       onNodesChange: (changes: NodeChange<TechNode>[]) => {
@@ -244,9 +255,27 @@ export const useStore = create<AppState>()(
 
       setNodes: (nodes) => set({ nodes }),
       setEdges: (edges) => set({ edges }),
-      replaceNodesAndEdgesForSync: (nodes, edges) => {
+      replaceNodesAndEdgesForSync: (nodes, edges, notionFieldColors, replaceColors = false) => {
         (useStore as any).temporal?.getState?.().clear?.();
-        set({ nodes: [...nodes], edges: [...edges], syncJustCompleted: true, dirtyNodeIds: new Set<string>() });
+        let nextColors = get().notionFieldColors;
+        if (notionFieldColors && Object.keys(notionFieldColors).length > 0) {
+          nextColors = replaceColors
+            ? notionFieldColors
+            : Object.entries(notionFieldColors).reduce(
+                (acc, [fk, map]) => {
+                  acc[fk] = { ...(acc[fk] || {}), ...map };
+                  return acc;
+                },
+                { ...get().notionFieldColors }
+              );
+        }
+        set({
+          nodes: [...nodes],
+          edges: [...edges],
+          syncJustCompleted: true,
+          dirtyNodeIds: new Set<string>(),
+          ...(notionFieldColors ? { notionFieldColors: nextColors } : {}),
+        });
       },
 
       addNode: (node) => {
@@ -285,11 +314,13 @@ export const useStore = create<AppState>()(
       setProjectName: (name) => set({ meta: { ...get().meta, name } }),
 
       loadProject: (project) => {
+        const loadedSettings = project.settings || {};
         set({
             nodes: project.nodes || [],
             edges: project.edges || [],
             meta: project.meta || defaultMeta,
-            settings: project.settings || defaultSettings
+            settings: { ...defaultSettings, ...loadedSettings },
+            notionFieldColors: project.notionFieldColors || {},
         });
       },
 

@@ -76,7 +76,7 @@ export const useNotionSyncActions = () => {
     if (!notionConfig) return;
     setSyncInProgress(true);
     try {
-      const { nodes: pulledNodes, edges: pulledEdges } = await pullFromNotionIncremental(
+      const { nodes: pulledNodes, edges: pulledEdges, notionFieldColors } = await pullFromNotionIncremental(
         notionConfig,
         lastSyncTime,
         nodes,
@@ -87,7 +87,7 @@ export const useNotionSyncActions = () => {
       const toSet = hasPositions
         ? { nodes: pulledNodes, edges: pulledEdges }
         : getLayoutedElements(pulledNodes, pulledEdges, settings.layoutDirection);
-      replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges);
+      replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges, notionFieldColors, false);
       setLastSyncResult({
         added: pulledNodes.length,
         updated: 0,

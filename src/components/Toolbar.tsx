@@ -12,12 +12,14 @@ import {
   RefreshCw,
   ChevronDown,
   AlertCircle,
+  Palette,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { getLayoutedElements } from '../utils/autoLayout';
 import { useFileSystem } from '../hooks/useFileSystem';
 import { useNotionSyncActions } from '../hooks/useNotionSyncActions';
 import { ProjectFile } from '../types';
+import { COLOR_BY_OPTIONS } from './ColorMappingModal';
 
 export const Toolbar = () => {
   const { undo, redo } = useStore.temporal.getState();
@@ -25,12 +27,14 @@ export const Toolbar = () => {
   const edges = useStore((state) => state.edges);
   const meta = useStore((state) => state.meta);
   const settings = useStore((state) => state.settings);
+  const notionFieldColors = useStore((state) => state.notionFieldColors);
 
   const setNodes = useStore((state) => state.setNodes);
   const setEdges = useStore((state) => state.setEdges);
   const addNode = useStore((state) => state.addNode);
   const loadProject = useStore((state) => state.loadProject);
   const setModalOpen = useStore((state) => state.setModalOpen);
+  const updateSettings = useStore((state) => state.updateSettings);
 
   const notionConfig = useStore((state) => state.notionConfig);
   const syncInProgress = useStore((state) => state.syncInProgress);
@@ -44,6 +48,8 @@ export const Toolbar = () => {
   const { doPush, doPull, canSync } = useNotionSyncActions();
   const [notionMenuOpen, setNotionMenuOpen] = useState(false);
   const notionMenuRef = useRef<HTMLDivElement>(null);
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const colorMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -54,6 +60,16 @@ export const Toolbar = () => {
     if (notionMenuOpen) document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [notionMenuOpen]);
+
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (colorMenuRef.current && !colorMenuRef.current.contains(e.target as Node)) {
+        setColorMenuOpen(false);
+      }
+    };
+    if (colorMenuOpen) document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [colorMenuOpen]);
 
   const handleAutoLayout = () => {
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
@@ -72,6 +88,7 @@ export const Toolbar = () => {
       settings,
       nodes,
       edges,
+      notionFieldColors: Object.keys(notionFieldColors).length > 0 ? notionFieldColors : undefined,
     };
     await saveProject(projectData);
   };
@@ -315,6 +332,72 @@ export const Toolbar = () => {
 
         <div className="h-5 w-px bg-panel-border mx-1" aria-hidden />
 
+        <div className="relative flex items-center min-w-[6rem]" ref={colorMenuRef}>
+          <button
+            type="button"
+            onClick={() => setModalOpen('colorMapping', true)}
+            className={`${iconBtnClass} w-auto min-w-[5rem] px-2 flex items-center gap-1.5 rounded-r-none -mr-px`}
+            title="Настройки цветов"
+            aria-label="Настройки цветов"
+          >
+            <Palette size={18} strokeWidth={1.75} />
+            <span className="text-xs font-medium truncate max-w-[4rem]">
+              {COLOR_BY_OPTIONS.find((o) => o.value === (settings.nodeColorBy ?? 'category'))?.label ?? 'Цвета'}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setColorMenuOpen((o) => !o);
+            }}
+            className="icon-btn w-6 h-9 flex items-center justify-center rounded-r-control rounded-l-none border border-control-border-muted text-muted hover:text-accent hover:border-accent/50 transition-all"
+            title="Быстрый выбор атрибута"
+            aria-label="Меню цветов"
+          >
+            <ChevronDown
+              size={14}
+              strokeWidth={1.75}
+              className={`transition-transform ${colorMenuOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {colorMenuOpen && (
+            <div
+              className="absolute top-full right-0 mt-1 py-1 min-w-[200px] rounded-control border border-panel-border bg-panel shadow-floating z-50"
+              role="menu"
+            >
+              {COLOR_BY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    updateSettings({ nodeColorBy: opt.value });
+                    setColorMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-control-hover-bg ${
+                    (settings.nodeColorBy ?? 'category') === opt.value ? 'text-accent bg-accent/10' : 'text-text'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              <div className="my-1 border-t border-panel-border" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setModalOpen('colorMapping', true);
+                  setColorMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-control-hover-bg"
+              >
+                <Settings size={16} strokeWidth={1.75} />
+                Настройки цветов...
+              </button>
+            </div>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setModalOpen('settings', true)}

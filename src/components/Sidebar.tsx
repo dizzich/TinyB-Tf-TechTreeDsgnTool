@@ -98,8 +98,12 @@ export const Sidebar = () => {
 
   return (
     <aside 
-      className="sidebar flex flex-col h-full backdrop-blur-md border-r border-panel-border p-4 gap-3 overflow-hidden transition-all w-[var(--sidebar-width)]"
-      style={{ backgroundColor: 'color-mix(in srgb, var(--panel) 90%, transparent)' }}
+      className="sidebar flex flex-col h-full border-r border-panel-border p-4 gap-3 overflow-hidden transition-all w-[var(--sidebar-width)]"
+      style={{
+        backgroundColor: 'color-mix(in srgb, var(--panel) 65%, transparent)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+      }}
     >
       <header className="sidebar__header shrink-0 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-text">Узлы</h1>

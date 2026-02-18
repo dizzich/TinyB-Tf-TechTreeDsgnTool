@@ -7,6 +7,7 @@ import { Graph } from './graph/Graph';
 import { ImportModal } from './components/ImportModal';
 import { ExportModal } from './components/ExportModal';
 import { SettingsModal } from './components/SettingsModal';
+import { ColorMappingModal } from './components/ColorMappingModal';
 import { StartupModal } from './components/StartupModal';
 import { NotionSyncModal } from './components/NotionSyncModal';
 import { StatusBar } from './components/StatusBar';
@@ -41,22 +42,12 @@ function App() {
     <ReactFlowProvider>
       <div
         id="app"
-        className="grid h-screen w-screen overflow-hidden text-text bg-bg transition-all duration-300 ease-in-out"
-        style={{
-          gridTemplateColumns: `${sidebarOpen ? 'var(--sidebar-width)' : '0px'} ${sidebarOpen ? '8px' : '0px'} minmax(0, 1fr) ${inspectorOpen ? '280px' : '0px'}`,
-        }}
+        className="relative flex h-screen w-screen overflow-hidden text-text bg-bg transition-all duration-300 ease-in-out"
       >
-        <div className={`relative ${!sidebarOpen && 'invisible w-0'}`}>
-           <Sidebar />
-        </div>
-        
-        {/* Resizer */}
-        <div className={`sidebar-resizer w-2 shrink-0 cursor-col-resize bg-panel-border hover:bg-accent/30 transition-colors ${!sidebarOpen && 'invisible w-0'}`} />
-
-        <div className="workspace relative min-w-0 flex flex-col bg-workspace-bg">
+        {/* Workspace fills the screen; panels overlay on top for glass effect */}
+        <div className="workspace flex-1 min-w-0 flex flex-col bg-workspace-bg relative z-0">
           <Toolbar />
           
-          {/* Floating Expand Buttons */}
           {!sidebarOpen && (
             <button
               onClick={toggleSidebar}
@@ -83,13 +74,28 @@ function App() {
           <StatusBar />
         </div>
 
-        <div className={`relative ${!inspectorOpen && 'invisible w-0'}`}>
-          <Inspector />
-        </div>
+        {sidebarOpen && (
+          <>
+            <div
+              className="sidebar-resizer absolute top-0 bottom-0 z-30 w-2 cursor-col-resize bg-panel-border hover:bg-accent/30 transition-colors"
+              style={{ left: 'var(--sidebar-width)' }}
+            />
+            <div className="absolute left-0 top-0 bottom-0 z-20" style={{ width: 'var(--sidebar-width)' }}>
+              <Sidebar />
+            </div>
+          </>
+        )}
+
+        {inspectorOpen && (
+          <div className="absolute right-0 top-0 bottom-0 z-20 w-80">
+            <Inspector />
+          </div>
+        )}
       </div>
       <ImportModal />
       <ExportModal />
       <SettingsModal />
+      <ColorMappingModal />
       <StartupModal />
       <NotionSyncModal />
     </ReactFlowProvider>

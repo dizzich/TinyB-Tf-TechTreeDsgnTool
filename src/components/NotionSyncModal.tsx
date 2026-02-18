@@ -21,6 +21,7 @@ const DEFAULT_COLUMN_MAPPING: NotionColumnMapping = {
   designStatus: 'TechCraftDesignStatus',
   notionSyncStatus: 'TechCraftNotionStatus',
   editorPosition: 'EditorPosition',
+  openCondition: 'OpenCondition',
 };
 
 type Step = 'connect' | 'mapping' | 'sync' | 'result';
@@ -79,7 +80,7 @@ export const NotionSyncModal = () => {
           ? NOTION_BUILTIN_PROXY
           : (notionCorsProxy ?? '')
       );
-      setMapping(notionConfig?.columnMapping || { ...DEFAULT_COLUMN_MAPPING });
+      setMapping(notionConfig?.columnMapping ? { ...DEFAULT_COLUMN_MAPPING, ...notionConfig.columnMapping } : { ...DEFAULT_COLUMN_MAPPING });
       setSyncLog([]);
       setSyncResult(null);
     }
@@ -153,7 +154,7 @@ export const NotionSyncModal = () => {
 
     try {
       addLog('Подключение к Notion...');
-      const { nodes: pulledNodes, edges: pulledEdges } = await pullFromNotionIncremental(
+      const { nodes: pulledNodes, edges: pulledEdges, notionFieldColors } = await pullFromNotionIncremental(
         notionConfig,
         lastSyncTime,
         nodes,
@@ -167,7 +168,7 @@ export const NotionSyncModal = () => {
       const toSet = hasPositions
         ? { nodes: pulledNodes, edges: pulledEdges }
         : getLayoutedElements(pulledNodes, pulledEdges, settings.layoutDirection);
-      replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges);
+      replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges, notionFieldColors, false);
       addLog(hasPositions ? 'Позиції завантажено з Notion' : 'Авто-розміщення...');
 
       const result = { added: pulledNodes.length, updated: 0, deleted: 0, conflicts: [], errors: [] };
@@ -253,7 +254,7 @@ export const NotionSyncModal = () => {
 
     try {
       addLog('Двусторонняя синхронизация...');
-      const { mergedNodes, mergedEdges, result } = await bidirectionalSync(
+      const { mergedNodes, mergedEdges, result, notionFieldColors } = await bidirectionalSync(
         nodes,
         edges,
         notionConfig,
@@ -268,7 +269,7 @@ export const NotionSyncModal = () => {
         mergedEdges,
         settings.layoutDirection
       );
-      replaceNodesAndEdgesForSync(layouted, layoutedEdges);
+      replaceNodesAndEdgesForSync(layouted, layoutedEdges, notionFieldColors, false);
 
       setSyncResult(result);
       setLastSyncResult(result);
@@ -292,7 +293,7 @@ export const NotionSyncModal = () => {
 
     try {
       addLog('Полная пересинхронизация: загрузка всей базы...');
-      const { nodes: remoteNodes, edges: remoteEdges } = await pullFromNotion(
+      const { nodes: remoteNodes, edges: remoteEdges, notionFieldColors } = await pullFromNotion(
         notionConfig,
         getEffectiveProxy()
       );
@@ -324,7 +325,7 @@ export const NotionSyncModal = () => {
       const toSet = hasPositions
         ? { nodes: mergedNodes, edges: remoteEdges }
         : getLayoutedElements(mergedNodes, remoteEdges, settings.layoutDirection);
-      replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges);
+      replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges, notionFieldColors, true);
 
       // Push remaining locally-newer dirty nodes
       const remainingDirty = new Set<string>();
@@ -519,6 +520,7 @@ export const NotionSyncModal = () => {
                 {renderMappingSelect('Статус дизайна', 'designStatus')}
                 {renderMappingSelect('Статус Notion', 'notionSyncStatus')}
                 {renderMappingSelect('Позиция в редакторе', 'editorPosition')}
+                {renderMappingSelect('OpenCondition (условие открытия)', 'openCondition')}
               </div>
             </div>
           )}

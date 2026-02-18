@@ -10,6 +10,7 @@ export const useKeyboardShortcuts = () => {
   const edges = useStore((state) => state.edges);
   const meta = useStore((state) => state.meta);
   const settings = useStore((state) => state.settings);
+  const notionFieldColors = useStore((state) => state.notionFieldColors);
   const loadProject = useStore((state) => state.loadProject);
   const setNodes = useStore((state) => state.setNodes);
   const modals = useStore((state) => state.modals);
@@ -37,6 +38,7 @@ export const useKeyboardShortcuts = () => {
           settings,
           nodes,
           edges,
+          notionFieldColors: Object.keys(notionFieldColors).length > 0 ? notionFieldColors : undefined,
         };
         saveProject(projectData);
         return;

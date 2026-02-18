@@ -130,7 +130,7 @@ export const useNotionAutoSave = () => {
         setSyncInProgress(true);
         const proxy = getEffectiveProxy(notionCorsProxy);
         const state = useStore.getState();
-        const { nodes: pulledNodes, edges: pulledEdges } = await pullFromNotionIncremental(
+        const { nodes: pulledNodes, edges: pulledEdges, notionFieldColors } = await pullFromNotionIncremental(
           notionConfig,
           state.lastSyncTime,
           state.nodes,
@@ -142,7 +142,7 @@ export const useNotionAutoSave = () => {
         const toSet = hasPositions
           ? { nodes: pulledNodes, edges: pulledEdges }
           : getLayoutedElements(pulledNodes, pulledEdges, state.settings.layoutDirection);
-        replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges);
+        replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges, notionFieldColors, false);
         setLastSyncTime(new Date().toISOString());
         setLastSyncError(null);
         setNotionHasRemoteUpdates(false);
