@@ -189,6 +189,8 @@ export type NodeColorMap = Record<string, string>;
 
 export type EdgeType = 'default' | 'straight' | 'step' | 'smoothstep';
 
+export type NodeVisualPreset = 'default' | 'bold' | 'outline' | 'minimal' | 'striped';
+
 export interface ProjectSettings {
   layoutDirection: 'LR' | 'TB';
   nodeTemplate: string;
@@ -203,13 +205,59 @@ export interface ProjectSettings {
   edgeStrokeWidth?: number;
   /** Edge animation (running dots), default false */
   edgeAnimated?: boolean;
+
+  /** Node visual: min width (px), default 200 */
+  nodeMinWidth?: number;
+  /** Node visual: max width (px), default 320 */
+  nodeMaxWidth?: number;
+  /** Node visual: min height (px), default 48 */
+  nodeMinHeight?: number;
+  /** Node visual: border width (1–6 px), default 2 */
+  nodeBorderWidth?: number;
+  /** Node visual: left strip width in default preset (2–12 px), default 3 */
+  nodeLeftStripWidth?: number;
+  /** Node text: horizontal alignment */
+  nodeTextAlignH?: 'left' | 'center' | 'right';
+  /** Node text: vertical alignment */
+  nodeTextAlignV?: 'top' | 'center' | 'bottom';
+  /** Node text: fit inside node (truncate) or allow overflow */
+  nodeTextFit?: boolean;
+  /** Node visual preset: default, bold, outline, minimal, striped */
+  nodeVisualPreset?: NodeVisualPreset;
+}
+
+/** Filter property — all node data fields usable for filtering */
+export type FilterProperty =
+  | 'act'
+  | 'stage'
+  | 'category'
+  | 'powerType'
+  | 'gameStatus'
+  | 'designStatus'
+  | 'notionSyncStatus'
+  | 'techGameStatus'
+  | 'techForAct'
+  | 'openCondition'
+  | 'openConditionRefs'
+  | 'outputItem'
+  | 'formulaUsedStation'
+  | 'itemLootingInAct'
+  | 'electricCost'
+  | 'researchTime';
+
+/** Filter condition: is / isNot = value-based, isEmpty / isNotEmpty = presence-based */
+export type FilterCondition = 'is' | 'isNot' | 'isNotEmpty' | 'isEmpty';
+
+export interface FilterRule {
+  id: string;
+  property: FilterProperty;
+  condition: FilterCondition;
+  values: string[];
 }
 
 export interface CanvasFilter {
   enabled: boolean;
-  act: string[];
-  stage: string[];
-  category: string[];
+  rules: FilterRule[];
   /** dim = semi-transparent + darker, hide = don't render */
   hideMode: 'dim' | 'hide';
 }

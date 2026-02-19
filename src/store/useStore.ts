@@ -41,6 +41,9 @@ interface AppState {
   // Canvas filter (runtime UI state, not persisted in project)
   canvasFilter: CanvasFilter;
 
+  /** Edge-click highlight: connected subgraph nodeIds and edgeIds, or null when off */
+  connectedSubgraphHighlight: { nodeIds: Set<string>; edgeIds: Set<string> } | null;
+
   // UI State
   ui: {
     sidebarOpen: boolean;
@@ -92,6 +95,7 @@ interface AppState {
   setSyncJustCompleted: (value: boolean) => void;
 
   setCanvasFilter: (filter: Partial<CanvasFilter>) => void;
+  setConnectedSubgraphHighlight: (ids: { nodeIds: Set<string>; edgeIds: Set<string> } | null) => void;
 
   setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync' | 'colorMapping', isOpen: boolean) => void;
 
@@ -107,6 +111,15 @@ const defaultSettings: ProjectSettings = {
   renderSimplification: false,
   nodeColorBy: 'category',
   nodeColorPalette: [...DEFAULT_NODE_COLOR_PALETTE],
+  nodeMinWidth: 200,
+  nodeMaxWidth: 320,
+  nodeMinHeight: 48,
+  nodeBorderWidth: 2,
+  nodeLeftStripWidth: 3,
+  nodeTextAlignH: 'left',
+  nodeTextAlignV: 'center',
+  nodeTextFit: true,
+  nodeVisualPreset: 'default',
 };
 
 const defaultMeta: ProjectMeta = {
@@ -184,11 +197,11 @@ export const useStore = create<AppState>()(
 
       canvasFilter: {
         enabled: false,
-        act: [],
-        stage: [],
-        category: [],
+        rules: [],
         hideMode: 'dim',
       },
+
+      connectedSubgraphHighlight: null,
 
       ui: {
         sidebarOpen: true,
@@ -205,24 +218,32 @@ export const useStore = create<AppState>()(
       },
 
       onNodesChange: (changes: NodeChange<TechNode>[]) => {
-        const changedIds: string[] = [];
+        const dragEndIds: string[] = [];
+        let hasDragEnd = false;
         for (const c of changes) {
-          // Only position = user actually dragged a node. Mark dirty only on drag end to avoid hundreds of store updates during multi-drag.
           const posChange = c as { type: string; id?: string; dragging?: boolean };
-          if (c.type === 'position' && c.id && posChange.dragging === false) changedIds.push(c.id);
+          if (c.type === 'position' && c.id && posChange.dragging === false) {
+            dragEndIds.push(c.id);
+            hasDragEnd = true;
+          }
         }
         let newNodes = applyNodeChanges(changes, get().nodes);
-        if (changedIds.length > 0) {
+        if (hasDragEnd) {
+          // Drag finished — record undo entry + mark dirty
           const ts = nowIso();
-          const ids = new Set(changedIds);
+          const ids = new Set(dragEndIds);
           newNodes = newNodes.map((n) =>
             ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
           );
           const next = new Set(get().dirtyNodeIds);
-          changedIds.forEach((id) => next.add(id));
+          dragEndIds.forEach((id) => next.add(id));
           set({ nodes: newNodes, dirtyNodeIds: next });
         } else {
+          // Selections, dimensions, intermediate drag — no undo entry
+          const temporal = (useStore as any).temporal?.getState?.();
+          temporal?.pause();
           set({ nodes: newNodes });
+          temporal?.resume();
         }
       },
 
@@ -237,6 +258,7 @@ export const useStore = create<AppState>()(
         }
         const newEdges = applyEdgeChanges(changes, currentEdges);
         if (removedIds.length > 0) {
+          // Edge removed — record undo entry + mark dirty
           const ts = nowIso();
           const ids = new Set(removedIds);
           const newNodes = get().nodes.map((n) =>
@@ -246,7 +268,11 @@ export const useStore = create<AppState>()(
           removedIds.forEach((id) => next.add(id));
           set({ nodes: newNodes, edges: newEdges, dirtyNodeIds: next });
         } else {
+          // Selection/other non-destructive edge changes — no undo entry
+          const temporal = (useStore as any).temporal?.getState?.();
+          temporal?.pause();
           set({ edges: newEdges });
+          temporal?.resume();
         }
       },
 
@@ -269,7 +295,8 @@ export const useStore = create<AppState>()(
       setNodes: (nodes) => set({ nodes }),
       setEdges: (edges) => set({ edges }),
       replaceNodesAndEdgesForSync: (nodes, edges, notionFieldColors, replaceColors = false) => {
-        (useStore as any).temporal?.getState?.().clear?.();
+        const temporal = (useStore as any).temporal?.getState?.();
+        temporal?.pause();
         let nextColors = get().notionFieldColors;
         if (notionFieldColors && Object.keys(notionFieldColors).length > 0) {
           nextColors = replaceColors
@@ -289,6 +316,7 @@ export const useStore = create<AppState>()(
           dirtyNodeIds: new Set<string>(),
           ...(notionFieldColors ? { notionFieldColors: nextColors } : {}),
         });
+        temporal?.resume();
       },
 
       addNode: (node) => {
@@ -377,11 +405,11 @@ export const useStore = create<AppState>()(
       setCanvasFilter: (filter) => {
         const current = get().canvasFilter;
         const next = { ...current, ...filter };
-        // Auto-enable/disable based on whether any filter is active
-        const hasFilters = next.act.length > 0 || next.stage.length > 0 || next.category.length > 0;
-        next.enabled = hasFilters;
+        next.enabled = (next.rules?.length ?? 0) > 0;
         set({ canvasFilter: next });
       },
+
+      setConnectedSubgraphHighlight: (ids) => set({ connectedSubgraphHighlight: ids }),
 
       setModalOpen: (modal, isOpen) => set({ modals: { ...get().modals, [modal]: isOpen } }),
 
@@ -392,6 +420,13 @@ export const useStore = create<AppState>()(
         localStorage.setItem(THEME_STORAGE_KEY, theme);
         set((state) => ({ ui: { ...state.ui, theme } }));
       },
-    })
+    }),
+    {
+      partialize: (state) => ({
+        nodes: state.nodes,
+        edges: state.edges,
+      }),
+      limit: 50,
+    }
   )
 );

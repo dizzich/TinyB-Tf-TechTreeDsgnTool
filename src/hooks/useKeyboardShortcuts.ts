@@ -3,9 +3,26 @@ import { useStore } from '../store/useStore';
 import { useFileSystem } from './useFileSystem';
 import { ProjectFile } from '../types';
 
+const doUndo = () => {
+  const temporal = useStore.temporal.getState();
+  temporal.pause();
+  temporal.undo();
+  temporal.resume();
+  const { nodes } = useStore.getState();
+  useStore.getState().markNodesDirty(nodes.map((n) => n.id));
+};
+
+const doRedo = () => {
+  const temporal = useStore.temporal.getState();
+  temporal.pause();
+  temporal.redo();
+  temporal.resume();
+  const { nodes } = useStore.getState();
+  useStore.getState().markNodesDirty(nodes.map((n) => n.id));
+};
+
 export const useKeyboardShortcuts = () => {
   const { saveProject, openProject } = useFileSystem();
-  const { undo, redo } = useStore.temporal.getState();
   const nodes = useStore((state) => state.nodes);
   const edges = useStore((state) => state.edges);
   const meta = useStore((state) => state.meta);
@@ -58,30 +75,36 @@ export const useKeyboardShortcuts = () => {
       // Ctrl/Cmd + Z: Undo
       if (modifier && event.key === 'z' && !event.shiftKey) {
         event.preventDefault();
-        undo();
+        doUndo();
         return;
       }
 
       // Ctrl/Cmd + Y or Ctrl/Cmd + Shift + Z: Redo
       if (modifier && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
         event.preventDefault();
-        redo();
+        doRedo();
         return;
       }
 
-      // Ctrl/Cmd + A: Select all nodes
+      // Ctrl/Cmd + A: Select all nodes (no undo entry)
       if (modifier && event.key === 'a') {
         event.preventDefault();
+        const t = useStore.temporal.getState();
+        t.pause();
         const updatedNodes = nodes.map((n) => ({ ...n, selected: true }));
         setNodes(updatedNodes);
+        t.resume();
         return;
       }
 
-      // Escape: Clear selection
+      // Escape: Clear selection (no undo entry)
       if (event.key === 'Escape') {
         event.preventDefault();
+        const t = useStore.temporal.getState();
+        t.pause();
         const updatedNodes = nodes.map((n) => ({ ...n, selected: false }));
         setNodes(updatedNodes);
+        t.resume();
         return;
       }
     };
@@ -98,7 +121,5 @@ export const useKeyboardShortcuts = () => {
     openProject,
     loadProject,
     setNodes,
-    undo,
-    redo,
   ]);
 };

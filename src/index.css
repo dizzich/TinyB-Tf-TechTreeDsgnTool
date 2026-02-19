@@ -182,10 +182,13 @@ h3 {
   width: 240px !important;
   height: 180px !important;
   z-index: 10;
+  overflow: hidden;
 }
 .react-flow__minimap-svg {
   width: 100% !important;
   height: 100% !important;
+  transform: translate(var(--minimap-pan-x, 0), var(--minimap-pan-y, 0)) scale(var(--minimap-zoom, 1));
+  transform-origin: center;
 }
 
 .minimap-overlay {
@@ -201,6 +204,11 @@ h3 {
 
 .minimap-shell {
   position: relative;
+}
+
+.minimap-pan-area {
+  position: relative;
+  display: inline-block;
 }
 
 .minimap-zoom {
@@ -237,6 +245,33 @@ h3 {
 .minimap-zoom-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.minimap-center-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--control-border-muted);
+  background: var(--control-bg-muted);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.minimap-center-btn:hover {
+  background: var(--control-hover-bg);
+  border-color: var(--control-hover-border);
+}
+.minimap-center-btn--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.minimap-center-btn--active:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .minimap-hide-btn {
@@ -351,5 +386,28 @@ select {
 /* Canvas filter: edges connected to dim nodes */
 .react-flow__edge.canvas-filter-dim-edge .react-flow__edge-path {
   opacity: 0.12;
+  transition: opacity 0.3s ease;
+}
+
+/* Edge-click highlight: connected subgraph nodes — same as selection (border + shadow via TechNode data.edgeHighlighted) */
+
+/* Edge-click highlight: nodes outside subgraph — dim */
+.react-flow__node.edge-highlight-dim {
+  opacity: 0.25;
+  filter: brightness(0.6);
+  transition: filter 0.3s ease, opacity 0.3s ease;
+  pointer-events: none;
+}
+
+/* Edge-click highlight: clicked edge — accent stroke + glow */
+.react-flow__edge.edge-highlight-match-edge .react-flow__edge-path {
+  stroke: var(--accent);
+  filter: drop-shadow(0 0 8px var(--accent));
+  transition: stroke 0.3s ease, filter 0.3s ease, opacity 0.3s ease;
+}
+
+/* Edge-click highlight: edges outside subgraph */
+.react-flow__edge.edge-highlight-dim-edge .react-flow__edge-path {
+  opacity: 0.15;
   transition: opacity 0.3s ease;
 }

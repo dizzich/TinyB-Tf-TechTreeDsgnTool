@@ -7,41 +7,81 @@ import { NotionIcon } from '../components/NotionIcon';
 import clsx from 'clsx';
 import type { NodeColorBy } from '../types';
 import { getColorValue, resolveNodeColor } from '../utils/colorMapping';
+import { getNodePresetStyles } from '../utils/nodePresetStyles';
+
+const DEFAULT_NODE_MIN_WIDTH = 200;
+const DEFAULT_NODE_MAX_WIDTH = 320;
+const DEFAULT_NODE_MIN_HEIGHT = 48;
 
 const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected?: boolean; id?: string }) => {
+  const isHighlighted = selected || data?.edgeHighlighted;
   const template = useStore((state) => state.settings.nodeTemplate);
   const nodeColorBy = useStore((state) => state.settings.nodeColorBy) ?? 'category';
   const nodeColorPalette = useStore((state) => state.settings.nodeColorPalette);
   const nodeColorMap = useStore((state) => state.settings.nodeColorMap);
   const notionFieldColors = useStore((state) => state.notionFieldColors);
+  const nodeMinWidth = useStore((state) => state.settings.nodeMinWidth) ?? DEFAULT_NODE_MIN_WIDTH;
+  const nodeMaxWidth = useStore((state) => state.settings.nodeMaxWidth) ?? DEFAULT_NODE_MAX_WIDTH;
+  const nodeMinHeight = useStore((state) => state.settings.nodeMinHeight) ?? DEFAULT_NODE_MIN_HEIGHT;
+  const nodeBorderWidth = useStore((state) => state.settings.nodeBorderWidth) ?? 2;
+  const nodeLeftStripWidth = useStore((state) => state.settings.nodeLeftStripWidth) ?? 3;
+  const nodeTextAlignH = useStore((state) => state.settings.nodeTextAlignH) ?? 'left';
+  const nodeTextAlignV = useStore((state) => state.settings.nodeTextAlignV) ?? 'center';
+  const nodeTextFit = useStore((state) => state.settings.nodeTextFit) ?? true;
+  const nodeVisualPreset = useStore((state) => state.settings.nodeVisualPreset) ?? 'default';
   const hasTemplate = template && template.trim().length > 0;
   const safeData = data ?? {};
   const colorValue = getColorValue(safeData, nodeColorBy);
   const accentColor = resolveNodeColor(colorValue, nodeColorMap, nodeColorPalette, notionFieldColors[nodeColorBy]);
   const displayLabel = safeData.label ?? safeData.techCraftId ?? safeData.outputItem ?? id ?? 'Без названия';
 
+  const presetStyles = getNodePresetStyles(nodeVisualPreset, accentColor, nodeBorderWidth);
+  const sizeStyle = {
+    minWidth: nodeMinWidth,
+    maxWidth: nodeMaxWidth,
+    minHeight: nodeMinHeight,
+  };
+
   return (
     <div
       className={clsx(
-        'rounded-[10px] border-2 min-w-[200px] max-w-[320px] transition-all bg-panel-2 text-text overflow-hidden',
-        selected
-          ? 'border-accent shadow-[0_0_18px_rgba(106,162,255,0.35)]'
-          : 'border-panel-border hover:border-control-hover-border hover:shadow-panel'
+        'rounded-[10px] transition-all text-text overflow-hidden flex flex-col',
+        presetStyles.className,
+        isHighlighted && 'shadow-[0_0_18px_rgba(106,162,255,0.35)]',
+        isHighlighted && nodeVisualPreset === 'default' && '!border-accent'
       )}
+      style={{ ...sizeStyle, ...presetStyles.style }}
     >
       <Handle
         type="target"
         position={Position.Left}
         className="!w-3.5 !h-3.5 !bg-control-border hover:!bg-accent !border-0 !rounded-full"
       />
-      <div className="flex">
+      <div className="flex flex-1 min-h-0">
+        {presetStyles.showLeftStrip && (
+          <div
+            className="shrink-0 self-stretch"
+            style={{ width: nodeLeftStripWidth, backgroundColor: accentColor }}
+          />
+        )}
         <div
-          className="w-[3px] shrink-0"
-          style={{ backgroundColor: accentColor }}
-        />
-        <div className="px-4 py-3 min-w-0 flex-1">
+          className={clsx(
+            'px-4 py-3 min-w-0 flex-1 flex flex-col',
+            nodeTextAlignV === 'top' && 'justify-start',
+            nodeTextAlignV === 'center' && 'justify-center',
+            nodeTextAlignV === 'bottom' && 'justify-end',
+            nodeTextAlignH === 'left' && 'items-start text-left',
+            nodeTextAlignH === 'center' && 'items-center text-center',
+            nodeTextAlignH === 'right' && 'items-end text-right'
+          )}
+        >
           {hasTemplate ? (
-            <div className="text-xs font-mono whitespace-pre-wrap">
+            <div
+              className={clsx(
+                'text-xs font-mono whitespace-pre-wrap',
+                nodeTextFit ? 'overflow-hidden' : 'overflow-visible'
+              )}
+            >
               {(() => {
                 const rendered = renderTemplate(template, safeData);
                 const hasContent = rendered && /[\p{L}\p{N}]/u.test(rendered);
@@ -50,11 +90,21 @@ const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected
             </div>
           ) : (
             <>
-              <div className="text-[15px] font-semibold leading-tight truncate">
+              <div
+                className={clsx(
+                  'text-[15px] font-semibold leading-tight',
+                  nodeTextFit && 'truncate overflow-hidden'
+                )}
+              >
                 {displayLabel}
               </div>
               {(safeData.act || safeData.stage || safeData.category) && (
-                <div className="text-[12px] text-muted mt-0.5 truncate">
+                <div
+                  className={clsx(
+                    'text-[12px] text-muted mt-0.5',
+                    nodeTextFit && 'truncate overflow-hidden'
+                  )}
+                >
                   {safeData.act && `Act ${safeData.act}`}
                   {safeData.stage && `${safeData.act ? ' \u00b7 ' : ''}Stage ${safeData.stage}`}
                   {safeData.category && `${safeData.act || safeData.stage ? ' \u00b7 ' : ''}${safeData.category}`}

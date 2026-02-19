@@ -24,9 +24,28 @@ import { useFileSystem } from '../hooks/useFileSystem';
 import { useNotionSyncActions } from '../hooks/useNotionSyncActions';
 import { ProjectFile, EdgeType } from '../types';
 import { COLOR_BY_OPTIONS } from './ColorMappingModal';
+import { FilterBuilder } from './FilterBuilder';
+import { buildUniqueValuesMap } from '../utils/filterUtils';
+
+const doUndo = () => {
+  const temporal = useStore.temporal.getState();
+  temporal.pause();
+  temporal.undo();
+  temporal.resume();
+  const { nodes } = useStore.getState();
+  useStore.getState().markNodesDirty(nodes.map((n) => n.id));
+};
+
+const doRedo = () => {
+  const temporal = useStore.temporal.getState();
+  temporal.pause();
+  temporal.redo();
+  temporal.resume();
+  const { nodes } = useStore.getState();
+  useStore.getState().markNodesDirty(nodes.map((n) => n.id));
+};
 
 export const Toolbar = () => {
-  const { undo, redo } = useStore.temporal.getState();
   const nodes = useStore((state) => state.nodes);
   const edges = useStore((state) => state.edges);
   const meta = useStore((state) => state.meta);
@@ -112,30 +131,12 @@ export const Toolbar = () => {
   const currentEdgeType = settings.edgeType ?? 'default';
   const currentEdgeOption = EDGE_TYPE_OPTIONS.find((o) => o.value === currentEdgeType) ?? EDGE_TYPE_OPTIONS[0];
 
-  // Unique values for canvas filter (same pattern as Sidebar)
-  const uniqueActs = React.useMemo(
-    () => Array.from(new Set(nodes.map((n) => n.data?.act?.toString() || '').filter(Boolean))).sort(),
-    [nodes]
-  );
-  const uniqueStages = React.useMemo(
-    () => Array.from(new Set(nodes.map((n) => n.data?.stage?.toString() || '').filter(Boolean))).sort(),
-    [nodes]
-  );
-  const uniqueCategories = React.useMemo(
-    () => Array.from(new Set(nodes.map((n) => n.data?.category || '').filter(Boolean))).sort(),
-    [nodes]
-  );
+  const uniqueValues = React.useMemo(() => buildUniqueValuesMap(nodes), [nodes]);
 
-  const canvasFilterCount = canvasFilter.act.length + canvasFilter.stage.length + canvasFilter.category.length;
+  const canvasFilterCount = canvasFilter.rules?.length ?? 0;
 
-  const toggleCanvasFilterValue = (key: 'act' | 'stage' | 'category', value: string) => {
-    const current = canvasFilter[key];
-    const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
-    setCanvasFilter({ [key]: next });
-  };
-
-  const clearCanvasFilter = () => {
-    setCanvasFilter({ act: [], stage: [], category: [] });
+  const handleCanvasFilterRulesChange = (rules: import('../types').FilterRule[]) => {
+    setCanvasFilter({ rules });
   };
 
   const handleAutoLayout = () => {
@@ -181,8 +182,11 @@ export const Toolbar = () => {
       selected: true,
     };
 
+    const t = useStore.temporal.getState();
+    t.pause();
     const updatedNodes = nodes.map((n) => ({ ...n, selected: false }));
     setNodes(updatedNodes);
+    t.resume();
     addNode(newNode);
   };
 
@@ -351,92 +355,16 @@ export const Toolbar = () => {
           </button>
           {canvasFilterOpen && (
             <div
-              className="absolute top-full left-0 mt-1 py-3 px-3 min-w-[240px] max-w-[300px] rounded-control border border-panel-border bg-panel shadow-floating z-50"
+              className="absolute top-full left-0 mt-1 py-3 px-3 min-w-[260px] max-w-[320px] rounded-control border border-panel-border bg-panel shadow-floating z-50"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-semibold text-text">Фильтр полотна</span>
-                {canvasFilterCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={clearCanvasFilter}
-                    className="text-xs text-accent hover:text-accent-hover transition-colors"
-                  >
-                    Очистить
-                  </button>
-                )}
-              </div>
-
-              {uniqueActs.length > 0 && (
-                <div className="mb-2">
-                  <label className="text-xs font-medium text-muted block mb-1">Акт</label>
-                  <div className="flex flex-wrap gap-1">
-                    {uniqueActs.map((act) => (
-                      <button
-                        key={act}
-                        type="button"
-                        onClick={() => toggleCanvasFilterValue('act', act)}
-                        className={`px-2 py-0.5 text-xs rounded-full border transition-all ${
-                          canvasFilter.act.includes(act)
-                            ? 'bg-accent/20 border-accent text-accent'
-                            : 'border-control-border-muted text-muted hover:border-accent/50 hover:text-text'
-                        }`}
-                      >
-                        {act}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {uniqueStages.length > 0 && (
-                <div className="mb-2">
-                  <label className="text-xs font-medium text-muted block mb-1">Стадия</label>
-                  <div className="flex flex-wrap gap-1">
-                    {uniqueStages.map((stage) => (
-                      <button
-                        key={stage}
-                        type="button"
-                        onClick={() => toggleCanvasFilterValue('stage', stage)}
-                        className={`px-2 py-0.5 text-xs rounded-full border transition-all ${
-                          canvasFilter.stage.includes(stage)
-                            ? 'bg-accent/20 border-accent text-accent'
-                            : 'border-control-border-muted text-muted hover:border-accent/50 hover:text-text'
-                        }`}
-                      >
-                        {stage}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {uniqueCategories.length > 0 && (
-                <div className="mb-2">
-                  <label className="text-xs font-medium text-muted block mb-1">Категория</label>
-                  <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
-                    {uniqueCategories.map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => toggleCanvasFilterValue('category', cat)}
-                        className={`px-2 py-0.5 text-xs rounded-full border transition-all ${
-                          canvasFilter.category.includes(cat)
-                            ? 'bg-accent/20 border-accent text-accent'
-                            : 'border-control-border-muted text-muted hover:border-accent/50 hover:text-text'
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {nodes.length === 0 && (
-                <p className="text-xs text-muted py-2">Нет узлов для фильтрации</p>
-              )}
-
+              <span className="text-sm font-semibold text-text block mb-3">Фильтр полотна</span>
+              <FilterBuilder
+                rules={canvasFilter.rules ?? []}
+                onRulesChange={handleCanvasFilterRulesChange}
+                uniqueValues={uniqueValues}
+                compact
+              />
               <div className="mt-3 pt-2 border-t border-panel-border">
                 <label className="flex items-center gap-2 cursor-pointer text-xs text-text hover:text-accent transition-colors">
                   <input
@@ -576,7 +504,7 @@ export const Toolbar = () => {
       <div className="flex items-center gap-1">
         <button
           type="button"
-          onClick={() => undo()}
+          onClick={doUndo}
           className={iconBtnClass}
           title="Отменить"
           aria-label="Отменить"
@@ -585,7 +513,7 @@ export const Toolbar = () => {
         </button>
         <button
           type="button"
-          onClick={() => redo()}
+          onClick={doRedo}
           className={iconBtnClass}
           title="Повторить"
           aria-label="Повторить"

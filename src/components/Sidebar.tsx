@@ -2,6 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { Search, Filter, ChevronLeft } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
+import { FilterBuilder } from './FilterBuilder';
+import { nodeMatchesRules, buildUniqueValuesMap } from '../utils/filterUtils';
+import type { FilterRule } from '../types';
 
 export const Sidebar = () => {
   const nodes = useStore((state) => state.nodes);
@@ -10,37 +13,18 @@ export const Sidebar = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'act' | 'stage' | 'order'>('order');
-  const [filterAct, setFilterAct] = useState<string[]>([]);
-  const [filterStage, setFilterStage] = useState<string[]>([]);
-  const [filterCategory, setFilterCategory] = useState<string[]>([]);
+  const [filterRules, setFilterRules] = useState<FilterRule[]>([]);
 
   const reactFlowInstance = useReactFlow();
 
-  const uniqueActs = useMemo(
-    () => Array.from(new Set(nodes.map((n) => n.data?.act?.toString() || '').filter(Boolean))),
-    [nodes]
-  );
-  const uniqueStages = useMemo(
-    () => Array.from(new Set(nodes.map((n) => n.data?.stage?.toString() || '').filter(Boolean))),
-    [nodes]
-  );
-  const uniqueCategories = useMemo(
-    () => Array.from(new Set(nodes.map((n) => n.data?.category || '').filter(Boolean))),
-    [nodes]
-  );
+  const uniqueValues = useMemo(() => buildUniqueValuesMap(nodes), [nodes]);
 
   const filteredNodes = useMemo(() => {
     let result = nodes.filter((n) => {
       const label = n.data?.label || n.id;
       const matchesSearch = label.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesAct =
-        filterAct.length === 0 || filterAct.includes(n.data?.act?.toString() || '');
-      const matchesStage =
-        filterStage.length === 0 || filterStage.includes(n.data?.stage?.toString() || '');
-      const matchesCategory =
-        filterCategory.length === 0 || filterCategory.includes(n.data?.category || '');
-
-      return matchesSearch && matchesAct && matchesStage && matchesCategory;
+      const matchesRules = nodeMatchesRules(n, filterRules);
+      return matchesSearch && matchesRules;
     });
 
     result.sort((a, b) => {
@@ -61,14 +45,17 @@ export const Sidebar = () => {
     });
 
     return result;
-  }, [nodes, searchTerm, filterAct, filterStage, filterCategory, sortBy]);
+  }, [nodes, searchTerm, filterRules, sortBy]);
 
   const handleNodeClick = (nodeId: string) => {
+    const t = useStore.temporal.getState();
+    t.pause();
     const updatedNodes = nodes.map((n) => ({
       ...n,
       selected: n.id === nodeId,
     }));
     setNodes(updatedNodes);
+    t.resume();
 
     if (reactFlowInstance) {
       reactFlowInstance.fitView({
@@ -79,22 +66,7 @@ export const Sidebar = () => {
     }
   };
 
-  const toggleFilter = (value: string, current: string[], setter: (val: string[]) => void) => {
-    if (current.includes(value)) {
-      setter(current.filter((v) => v !== value));
-    } else {
-      setter([...current, value]);
-    }
-  };
-
-  const clearFilters = () => {
-    setFilterAct([]);
-    setFilterStage([]);
-    setFilterCategory([]);
-  };
-
-  const activeFilterCount =
-    filterAct.length + filterStage.length + filterCategory.length;
+  const activeFilterCount = filterRules.length;
 
   return (
     <aside 
@@ -168,85 +140,12 @@ export const Sidebar = () => {
             </div>
 
             {showFilters && (
-              <div className="p-3 bg-control-bg-muted border border-control-border-muted rounded-control text-xs space-y-2">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-text">Фильтры</span>
-                  {activeFilterCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={clearFilters}
-                      className="text-accent hover:text-accent-hover transition-colors"
-                    >
-                      Очистить
-                    </button>
-                  )}
-                </div>
-
-                {uniqueActs.length > 0 && (
-                  <div>
-                    <label className="font-medium text-text block mb-1">Акт</label>
-                    <div className="space-y-1">
-                      {uniqueActs.map((act) => (
-                        <label
-                          key={act}
-                          className="checkbox-label flex items-center gap-1.5 cursor-pointer text-text hover:text-accent transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={filterAct.includes(act)}
-                            onChange={() => toggleFilter(act, filterAct, setFilterAct)}
-                            className="w-4 h-4 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
-                          />
-                          <span>Акт {act}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {uniqueStages.length > 0 && (
-                  <div>
-                    <label className="font-medium text-text block mb-1">Стадия</label>
-                    <div className="space-y-1">
-                      {uniqueStages.map((stage) => (
-                        <label
-                          key={stage}
-                          className="checkbox-label flex items-center gap-1.5 cursor-pointer text-text hover:text-accent transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={filterStage.includes(stage)}
-                            onChange={() => toggleFilter(stage, filterStage, setFilterStage)}
-                            className="w-4 h-4 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
-                          />
-                          <span>Стадия {stage}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {uniqueCategories.length > 0 && (
-                  <div>
-                    <label className="font-medium text-text block mb-1">Категория</label>
-                    <div className="space-y-1 max-h-32 overflow-y-auto sidebar__scroll">
-                      {uniqueCategories.map((cat) => (
-                        <label
-                          key={cat}
-                          className="checkbox-label flex items-center gap-1.5 cursor-pointer text-text hover:text-accent transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={filterCategory.includes(cat)}
-                            onChange={() => toggleFilter(cat, filterCategory, setFilterCategory)}
-                            className="w-4 h-4 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
-                          />
-                          <span className="truncate">{cat}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="p-3 bg-control-bg-muted border border-control-border-muted rounded-control text-xs">
+                <FilterBuilder
+                  rules={filterRules}
+                  onRulesChange={setFilterRules}
+                  uniqueValues={uniqueValues}
+                />
               </div>
             )}
 

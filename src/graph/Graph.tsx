@@ -4,13 +4,13 @@ import '@xyflow/react/dist/style.css';
 
 import { useStore } from '../store/useStore';
 import TechNode from './TechNode';
+import { nodeMatchesRules } from '../utils/filterUtils';
 import type { TechNode as TechNodeType, CanvasFilter } from '../types';
 
 function matchesCanvasFilter(node: TechNodeType, filter: CanvasFilter): boolean {
-  const matchAct = filter.act.length === 0 || filter.act.includes(node.data?.act?.toString() || '');
-  const matchStage = filter.stage.length === 0 || filter.stage.includes(node.data?.stage?.toString() || '');
-  const matchCategory = filter.category.length === 0 || filter.category.includes(node.data?.category || '');
-  return matchAct && matchStage && matchCategory;
+  const rules = filter.rules ?? [];
+  if (rules.length === 0) return true;
+  return nodeMatchesRules(node, rules);
 }
 
 export const Graph = () => {
@@ -21,6 +21,8 @@ export const Graph = () => {
     onEdgesChange,
     onConnect,
     deleteNodes,
+    connectedSubgraphHighlight,
+    setConnectedSubgraphHighlight,
   } = useStore((state) => ({
     nodes: state.nodes,
     edges: state.edges,
@@ -28,6 +30,8 @@ export const Graph = () => {
     onEdgesChange: state.onEdgesChange,
     onConnect: state.onConnect,
     deleteNodes: state.deleteNodes,
+    connectedSubgraphHighlight: state.connectedSubgraphHighlight,
+    setConnectedSubgraphHighlight: state.setConnectedSubgraphHighlight,
   }));
 
   const theme = useStore((state) => state.ui.theme);
@@ -39,30 +43,45 @@ export const Graph = () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeTypes = useMemo(() => ({ techNode: TechNode as any }), []);
 
-  // Apply canvas filter to nodes
+  // Apply canvas filter and/or edge-click highlight to nodes
   const { processedNodes, matchedNodeIds } = useMemo(() => {
-    if (!canvasFilter.enabled) return { processedNodes: nodes, matchedNodeIds: null };
-    if (canvasFilter.hideMode === 'hide') {
-      return {
-        processedNodes: nodes.filter((node) => matchesCanvasFilter(node, canvasFilter)),
-        matchedNodeIds: null,
-      };
-    }
-    // dim mode: add className, track matched IDs for edge processing
-    const matched = new Set<string>();
-    const result = nodes.map((node) => {
-      const matches = matchesCanvasFilter(node, canvasFilter);
-      if (matches) matched.add(node.id);
-      return {
-        ...node,
-        className: matches ? 'canvas-filter-match' : 'canvas-filter-dim',
-      } as TechNodeType & { className: string };
-    });
-    return { processedNodes: result, matchedNodeIds: matched };
-  }, [nodes, canvasFilter]);
+    let baseNodes = nodes;
+    let matchedNodeIds: Set<string> | null = null;
 
-  // Apply edgeType + style overrides + canvas filter to edges.
-  // Explicitly set `type` on every edge to guarantee re-render on type change.
+    if (canvasFilter.enabled) {
+      if (canvasFilter.hideMode === 'hide') {
+        baseNodes = nodes.filter((node) => matchesCanvasFilter(node, canvasFilter));
+      } else {
+        const matched = new Set<string>();
+        baseNodes = nodes.map((node) => {
+          const matches = matchesCanvasFilter(node, canvasFilter);
+          if (matches) matched.add(node.id);
+          return {
+            ...node,
+            className: matches ? 'canvas-filter-match' : 'canvas-filter-dim',
+          } as TechNodeType & { className: string };
+        });
+        matchedNodeIds = matched;
+      }
+    }
+
+    // Edge-click highlight takes priority when active (same look as node selection)
+    if (connectedSubgraphHighlight) {
+      const { nodeIds } = connectedSubgraphHighlight;
+      baseNodes = baseNodes.map((node) => {
+        const inSubgraph = nodeIds.has(node.id);
+        return {
+          ...node,
+          data: { ...node.data, edgeHighlighted: inSubgraph },
+          className: inSubgraph ? undefined : 'edge-highlight-dim',
+        } as TechNodeType & { className?: string };
+      });
+    }
+
+    return { processedNodes: baseNodes, matchedNodeIds };
+  }, [nodes, canvasFilter, connectedSubgraphHighlight]);
+
+  // Apply edgeType + style overrides + canvas filter + edge-click highlight to edges.
   const processedEdges = useMemo(() => {
     let result = edges.map((e) => ({
       ...e,
@@ -71,22 +90,42 @@ export const Graph = () => {
       animated: edgeAnimated,
     }));
 
-    if (!canvasFilter.enabled) return result;
-
-    if (canvasFilter.hideMode === 'hide') {
-      const visibleNodeIds = new Set(processedNodes.map((n) => n.id));
-      return result.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
-    }
-    // dim mode: dim edges connected to dimmed nodes
-    if (!matchedNodeIds) return result;
-    return result.map((e) => {
-      const bothMatch = matchedNodeIds.has(e.source) && matchedNodeIds.has(e.target);
-      return {
+    if (connectedSubgraphHighlight) {
+      const { edgeIds } = connectedSubgraphHighlight;
+      result = result.map((e) => ({
         ...e,
-        className: bothMatch ? undefined : 'canvas-filter-dim-edge',
-      };
-    });
-  }, [edges, edgeType, edgeStrokeWidth, edgeAnimated, processedNodes, matchedNodeIds, canvasFilter]);
+        className: edgeIds.has(e.id) ? 'edge-highlight-match-edge' : 'edge-highlight-dim-edge',
+      }));
+    } else if (canvasFilter.enabled) {
+      if (canvasFilter.hideMode === 'hide') {
+        const visibleNodeIds = new Set(processedNodes.map((n) => n.id));
+        result = result.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
+      } else if (matchedNodeIds) {
+        result = result.map((e) => {
+          const bothMatch = matchedNodeIds.has(e.source) && matchedNodeIds.has(e.target);
+          return {
+            ...e,
+            className: bothMatch ? undefined : 'canvas-filter-dim-edge',
+          };
+        });
+      }
+    }
+
+    return result;
+  }, [edges, edgeType, edgeStrokeWidth, edgeAnimated, processedNodes, matchedNodeIds, canvasFilter, connectedSubgraphHighlight]);
+
+  const handleEdgeClick = useCallback(
+    (_: React.MouseEvent, edge: { id: string; source: string; target: string }) => {
+      const nodeIds = new Set<string>([edge.source, edge.target]);
+      const edgeIds = new Set<string>([edge.id]);
+      setConnectedSubgraphHighlight({ nodeIds, edgeIds });
+    },
+    [setConnectedSubgraphHighlight]
+  );
+
+  const clearHighlight = useCallback(() => {
+    setConnectedSubgraphHighlight(null);
+  }, [setConnectedSubgraphHighlight]);
 
   // Handle keyboard events for deletion
   const handleKeyDown = useCallback(
@@ -108,9 +147,14 @@ export const Graph = () => {
       <ReactFlow
         nodes={processedNodes}
         edges={processedEdges}
+        minZoom={0.05}
+        maxZoom={2.5}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onEdgeClick={handleEdgeClick}
+        onPaneClick={clearHighlight}
+        onNodeClick={clearHighlight}
         nodeTypes={nodeTypes}
         fitView
         className="bg-workspace-bg"

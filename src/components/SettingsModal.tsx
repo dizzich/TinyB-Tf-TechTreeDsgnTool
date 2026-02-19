@@ -1,15 +1,26 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { NodePreview } from './NodePreview';
+import type { NodeVisualPreset } from '../types';
 
 const inputClass =
   'w-full border border-control-border rounded-control px-2.5 py-1.5 text-sm bg-control-bg text-text placeholder:text-muted focus:outline-none focus:border-accent transition-colors';
 const labelClass = 'block text-sm font-medium text-muted mb-2';
 
+const NODE_VISUAL_PRESETS: { value: NodeVisualPreset; label: string }[] = [
+  { value: 'default', label: 'Обычный — нейтральная обводка, полоска цвета слева' },
+  { value: 'bold', label: 'Жирная обводка — обводка и тёмный фон цветом категории' },
+  { value: 'outline', label: 'Только обводка — обводка цветом, фон обычный' },
+  { value: 'minimal', label: 'Минимальный — нейтральная обводка, без полоски' },
+  { value: 'striped', label: 'Полосатая заливка — диагональные полосы в стиле draw.io' },
+];
+
 export const SettingsModal = () => {
   const isOpen = useStore((state) => state.modals.settings);
   const settings = useStore((state) => state.settings);
   const theme = useStore((state) => state.ui.theme);
+  const notionFieldColors = useStore((state) => state.notionFieldColors);
   const setModalOpen = useStore((state) => state.setModalOpen);
   const updateSettings = useStore((state) => state.updateSettings);
   const setTheme = useStore((state) => state.setTheme);
@@ -64,7 +75,7 @@ export const SettingsModal = () => {
       className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-[4px]"
       style={{ background: 'var(--modal-overlay)' }}
     >
-      <div className="bg-modal-bg border border-modal-border rounded-[16px] shadow-modal w-full max-w-2xl max-h-[80vh] flex flex-col transition-colors">
+      <div className="bg-modal-bg border border-modal-border rounded-[16px] shadow-modal w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden transition-colors">
         <div className="modal__header flex items-center justify-between p-4 border-b border-panel-border">
           <h2 className="text-lg font-semibold text-text uppercase tracking-wider">Настройки</h2>
           <button
@@ -77,7 +88,7 @@ export const SettingsModal = () => {
           </button>
         </div>
 
-        <div className="flex border-b border-panel-border overflow-x-auto">
+        <div className="flex shrink-0 border-b border-panel-border overflow-x-auto min-w-0 px-4">
           {(['general', 'visuals', 'template', 'performance'] as const).map((tab) => (
             <button
               key={tab}
@@ -195,6 +206,179 @@ export const SettingsModal = () => {
                 <p className="mt-1 text-xs text-muted">
                   Используйте заполнители типа %label%, %act% и т.д. по полям NodeData. Неизвестные — пустые.
                 </p>
+              </div>
+
+              <div className="border-t border-panel-border pt-4">
+                <h3 className="text-sm font-medium text-text mb-3">Визуал нод</h3>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className={labelClass}>Мин. ширина (px)</label>
+                    <input
+                      type="number"
+                      min={120}
+                      max={500}
+                      value={localSettings.nodeMinWidth ?? 200}
+                      onChange={(e) =>
+                        setLocalSettings({
+                          ...localSettings,
+                          nodeMinWidth: Math.min(500, Math.max(120, parseInt(e.target.value, 10) || 200)),
+                        })
+                      }
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Макс. ширина (px)</label>
+                    <input
+                      type="number"
+                      min={120}
+                      max={500}
+                      value={localSettings.nodeMaxWidth ?? 320}
+                      onChange={(e) =>
+                        setLocalSettings({
+                          ...localSettings,
+                          nodeMaxWidth: Math.min(500, Math.max(120, parseInt(e.target.value, 10) || 320)),
+                        })
+                      }
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label className={labelClass}>Мин. высота (px)</label>
+                  <input
+                    type="number"
+                    min={32}
+                    max={120}
+                    value={localSettings.nodeMinHeight ?? 48}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        nodeMinHeight: Math.min(120, Math.max(32, parseInt(e.target.value, 10) || 48)),
+                      })
+                    }
+                    className={inputClass}
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className={labelClass}>Толщина линии (px)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={6}
+                    value={localSettings.nodeBorderWidth ?? 2}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        nodeBorderWidth: Math.min(6, Math.max(1, parseInt(e.target.value, 10) || 2)),
+                      })
+                    }
+                    className={inputClass}
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className={labelClass}>Толщина боковой полоски (px)</label>
+                  <input
+                    type="number"
+                    min={2}
+                    max={12}
+                    value={localSettings.nodeLeftStripWidth ?? 3}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        nodeLeftStripWidth: Math.min(12, Math.max(2, parseInt(e.target.value, 10) || 3)),
+                      })
+                    }
+                    className={inputClass}
+                  />
+                  <p className="mt-1 text-xs text-muted">Только для пресета «Обычный»</p>
+                </div>
+                <div className="mb-4">
+                  <label className={labelClass}>Выравнивание текста</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs text-muted block mb-1">По горизонтали</span>
+                      <select
+                        value={localSettings.nodeTextAlignH ?? 'left'}
+                        onChange={(e) =>
+                          setLocalSettings({
+                            ...localSettings,
+                            nodeTextAlignH: e.target.value as 'left' | 'center' | 'right',
+                          })
+                        }
+                        className={inputClass}
+                      >
+                        <option value="left">Слева</option>
+                        <option value="center">По центру</option>
+                        <option value="right">Справа</option>
+                      </select>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted block mb-1">По вертикали</span>
+                      <select
+                        value={localSettings.nodeTextAlignV ?? 'center'}
+                        onChange={(e) =>
+                          setLocalSettings({
+                            ...localSettings,
+                            nodeTextAlignV: e.target.value as 'top' | 'center' | 'bottom',
+                          })
+                        }
+                        className={inputClass}
+                      >
+                        <option value="top">К верху</option>
+                        <option value="center">По центру</option>
+                        <option value="bottom">К низу</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={localSettings.nodeTextFit ?? true}
+                      onChange={(e) =>
+                        setLocalSettings({ ...localSettings, nodeTextFit: e.target.checked })
+                      }
+                      className="w-4 h-4 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
+                    />
+                    <span className="text-sm text-text">Вписывать текст в ноду</span>
+                  </label>
+                  <p className="mt-1 text-xs text-muted">
+                    Если выключено, текст может выходить за границы ноды
+                  </p>
+                </div>
+                <div>
+                  <label className={labelClass}>Пресет оформления</label>
+                  <div className="space-y-2">
+                    {NODE_VISUAL_PRESETS.map(({ value, label }) => (
+                      <label
+                        key={value}
+                        className="flex items-center gap-2 cursor-pointer text-text hover:text-accent transition-colors"
+                      >
+                        <input
+                          type="radio"
+                          name="nodeVisualPreset"
+                          value={value}
+                          checked={(localSettings.nodeVisualPreset ?? 'default') === value}
+                          onChange={() =>
+                            setLocalSettings({ ...localSettings, nodeVisualPreset: value })
+                          }
+                          className="w-4 h-4 border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-panel-border pt-4">
+                <h3 className="text-sm font-medium text-text mb-2">Предпросмотр</h3>
+                <p className="text-xs text-muted mb-2">
+                  Как будет выглядеть нода с текущим шаблоном и выбранным визуалом:
+                </p>
+                <NodePreview settings={localSettings} notionFieldColors={notionFieldColors} />
               </div>
 
               <div>

@@ -175,8 +175,11 @@ export const Inspector = () => {
   };
 
   const handleJumpToNode = (nodeId: string) => {
+    const t = useStore.temporal.getState();
+    t.pause();
     const updatedNodes = nodes.map((n) => ({ ...n, selected: n.id === nodeId }));
     setNodes(updatedNodes);
+    t.resume();
     const targetNode = nodes.find((n) => n.id === nodeId);
     if (targetNode && reactFlowInstance) {
       reactFlowInstance.fitView({ padding: 0.5, nodes: [{ id: nodeId }], duration: 300 });
