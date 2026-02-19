@@ -20,6 +20,7 @@ export const Graph = () => {
     onNodesChange,
     onEdgesChange,
     onConnect,
+    onNodeDragStart,
     deleteNodes,
     connectedSubgraphHighlight,
     setConnectedSubgraphHighlight,
@@ -29,6 +30,7 @@ export const Graph = () => {
     onNodesChange: state.onNodesChange,
     onEdgesChange: state.onEdgesChange,
     onConnect: state.onConnect,
+    onNodeDragStart: state.onNodeDragStart,
     deleteNodes: state.deleteNodes,
     connectedSubgraphHighlight: state.connectedSubgraphHighlight,
     setConnectedSubgraphHighlight: state.setConnectedSubgraphHighlight,
@@ -130,7 +132,7 @@ export const Graph = () => {
   // Handle keyboard events for deletion
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
-      if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (event.code === 'Delete' || event.code === 'Backspace') {
         const selectedNodes = nodes.filter((n) => n.selected);
         if (selectedNodes.length > 0) {
           const nodeIds = selectedNodes.map((n) => n.id);
@@ -152,6 +154,7 @@ export const Graph = () => {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeDragStart={onNodeDragStart}
         onEdgeClick={handleEdgeClick}
         onPaneClick={clearHighlight}
         onNodeClick={clearHighlight}

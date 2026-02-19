@@ -48,14 +48,11 @@ export const Sidebar = () => {
   }, [nodes, searchTerm, filterRules, sortBy]);
 
   const handleNodeClick = (nodeId: string) => {
-    const t = useStore.temporal.getState();
-    t.pause();
     const updatedNodes = nodes.map((n) => ({
       ...n,
       selected: n.id === nodeId,
     }));
     setNodes(updatedNodes);
-    t.resume();
 
     if (reactFlowInstance) {
       reactFlowInstance.fitView({

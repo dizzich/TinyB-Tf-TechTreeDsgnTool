@@ -3,24 +3,6 @@ import { useStore } from '../store/useStore';
 import { useFileSystem } from './useFileSystem';
 import { ProjectFile } from '../types';
 
-const doUndo = () => {
-  const temporal = useStore.temporal.getState();
-  temporal.pause();
-  temporal.undo();
-  temporal.resume();
-  const { nodes } = useStore.getState();
-  useStore.getState().markNodesDirty(nodes.map((n) => n.id));
-};
-
-const doRedo = () => {
-  const temporal = useStore.temporal.getState();
-  temporal.pause();
-  temporal.redo();
-  temporal.resume();
-  const { nodes } = useStore.getState();
-  useStore.getState().markNodesDirty(nodes.map((n) => n.id));
-};
-
 export const useKeyboardShortcuts = () => {
   const { saveProject, openProject } = useFileSystem();
   const nodes = useStore((state) => state.nodes);
@@ -46,8 +28,11 @@ export const useKeyboardShortcuts = () => {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const modifier = isMac ? event.metaKey : event.ctrlKey;
 
+      // Use event.code for layout-independent keys (works with any keyboard layout)
+      const code = event.code;
+
       // Ctrl/Cmd + S: Save
-      if (modifier && event.key === 's') {
+      if (modifier && code === 'KeyS') {
         event.preventDefault();
         const projectData: ProjectFile = {
           version: '1.0',
@@ -62,7 +47,7 @@ export const useKeyboardShortcuts = () => {
       }
 
       // Ctrl/Cmd + O: Open
-      if (modifier && event.key === 'o') {
+      if (modifier && code === 'KeyO') {
         event.preventDefault();
         openProject().then((project) => {
           if (project) {
@@ -73,38 +58,32 @@ export const useKeyboardShortcuts = () => {
       }
 
       // Ctrl/Cmd + Z: Undo
-      if (modifier && event.key === 'z' && !event.shiftKey) {
+      if (modifier && code === 'KeyZ' && !event.shiftKey) {
         event.preventDefault();
-        doUndo();
+        useStore.getState().undo();
         return;
       }
 
       // Ctrl/Cmd + Y or Ctrl/Cmd + Shift + Z: Redo
-      if (modifier && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
+      if (modifier && (code === 'KeyY' || (code === 'KeyZ' && event.shiftKey))) {
         event.preventDefault();
-        doRedo();
+        useStore.getState().redo();
         return;
       }
 
       // Ctrl/Cmd + A: Select all nodes (no undo entry)
-      if (modifier && event.key === 'a') {
+      if (modifier && code === 'KeyA') {
         event.preventDefault();
-        const t = useStore.temporal.getState();
-        t.pause();
         const updatedNodes = nodes.map((n) => ({ ...n, selected: true }));
         setNodes(updatedNodes);
-        t.resume();
         return;
       }
 
       // Escape: Clear selection (no undo entry)
-      if (event.key === 'Escape') {
+      if (code === 'Escape') {
         event.preventDefault();
-        const t = useStore.temporal.getState();
-        t.pause();
         const updatedNodes = nodes.map((n) => ({ ...n, selected: false }));
         setNodes(updatedNodes);
-        t.resume();
         return;
       }
     };
@@ -117,6 +96,7 @@ export const useKeyboardShortcuts = () => {
     meta,
     settings,
     modals,
+    notionFieldColors,
     saveProject,
     openProject,
     loadProject,

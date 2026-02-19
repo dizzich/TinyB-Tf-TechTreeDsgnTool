@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { temporal } from 'zundo';
 import {
   Connection,
   EdgeChange,
@@ -12,6 +11,17 @@ import {
   OnConnect,
 } from '@xyflow/react';
 import { TechNode, TechEdge, ProjectMeta, ProjectSettings, NotionConfig, SyncResult, DEFAULT_NODE_COLOR_PALETTE, CanvasFilter } from '../types';
+
+const HISTORY_LIMIT = 50;
+
+export interface HistorySnapshot {
+  nodes: TechNode[];
+  edges: TechEdge[];
+}
+
+function cloneSnapshot(nodes: TechNode[], edges: TechEdge[]): HistorySnapshot {
+  return { nodes: structuredClone(nodes), edges: structuredClone(edges) };
+}
 
 const NOTION_STORAGE_KEY = 'techtree_notion_config';
 const THEME_STORAGE_KEY = 'techtree_theme';
@@ -58,10 +68,20 @@ interface AppState {
     colorMapping: boolean;
   };
 
+  // Undo/redo (internal state not exposed; use canUndo/canRedo for UI)
+  _history: { past: HistorySnapshot[]; future: HistorySnapshot[] };
+  _pushSnapshot: () => void;
+  undo: () => void;
+  redo: () => void;
+  clearHistory: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+
   // Actions
   onNodesChange: OnNodesChange<TechNode>;
   onEdgesChange: OnEdgesChange<TechEdge>;
   onConnect: OnConnect;
+  onNodeDragStart: () => void;
   setNodes: (nodes: TechNode[]) => void;
   setEdges: (edges: TechEdge[]) => void;
   /** Replace nodes/edges from sync (Pull). Optionally merge/replace notionFieldColors. */
@@ -171,13 +191,58 @@ const persistLastSyncTime = (databaseId: string | undefined, time: string | null
 
 const nowIso = () => new Date().toISOString();
 
-export const useStore = create<AppState>()(
-  temporal(
-    (set, get) => ({
-      nodes: [],
-      edges: [],
-      meta: defaultMeta,
-      settings: defaultSettings,
+// Suppresses creating a history entry when ReactFlow echoes position change after undo/redo.
+let _restoringHistory = false;
+
+export const useStore = create<AppState>()((set, get) => ({
+  nodes: [],
+  edges: [],
+  meta: defaultMeta,
+  settings: defaultSettings,
+
+  _history: { past: [], future: [] },
+
+  _pushSnapshot: () => {
+    const { nodes, edges, _history } = get();
+    const past = [..._history.past, cloneSnapshot(nodes, edges)].slice(-HISTORY_LIMIT);
+    set({ _history: { past, future: [] } });
+  },
+
+  undo: () => {
+    const { _history, nodes, edges } = get();
+    if (_history.past.length === 0) return;
+    _restoringHistory = true;
+    const prev = _history.past[_history.past.length - 1];
+    const past = _history.past.slice(0, -1);
+    const future = [cloneSnapshot(nodes, edges), ..._history.future];
+    set({ nodes: prev.nodes, edges: prev.edges, _history: { past, future } });
+    const changedIds = new Set<string>();
+    prev.nodes.forEach((n) => changedIds.add(n.id));
+    nodes.forEach((n) => changedIds.add(n.id));
+    get().markNodesDirty([...changedIds]);
+    // Use setTimeout to ensure flag stays true during ReactFlow's immediate echo events
+    setTimeout(() => { _restoringHistory = false; }, 100);
+  },
+
+  redo: () => {
+    const { _history, nodes, edges } = get();
+    if (_history.future.length === 0) return;
+    _restoringHistory = true;
+    const next = _history.future[0];
+    const past = [..._history.past, cloneSnapshot(nodes, edges)].slice(-HISTORY_LIMIT);
+    const future = _history.future.slice(1);
+    set({ nodes: next.nodes, edges: next.edges, _history: { past, future } });
+    const changedIds = new Set<string>();
+    next.nodes.forEach((n) => changedIds.add(n.id));
+    nodes.forEach((n) => changedIds.add(n.id));
+    get().markNodesDirty([...changedIds]);
+    setTimeout(() => { _restoringHistory = false; }, 100);
+  },
+
+  clearHistory: () => set({ _history: { past: [], future: [] } }),
+
+  canUndo: () => get()._history.past.length > 0,
+  canRedo: () => get()._history.future.length > 0,
 
       // Notion state
       notionConfig: loadNotionConfig(),
@@ -217,7 +282,13 @@ export const useStore = create<AppState>()(
         colorMapping: false,
       },
 
+      onNodeDragStart: () => {
+        get()._pushSnapshot();
+      },
+
       onNodesChange: (changes: NodeChange<TechNode>[]) => {
+        if (_restoringHistory) return;
+        
         const dragEndIds: string[] = [];
         let hasDragEnd = false;
         for (const c of changes) {
@@ -227,27 +298,26 @@ export const useStore = create<AppState>()(
             hasDragEnd = true;
           }
         }
-        let newNodes = applyNodeChanges(changes, get().nodes);
+        
+        const newNodes = applyNodeChanges(changes, get().nodes);
         if (hasDragEnd) {
-          // Drag finished — record undo entry + mark dirty
+          // Snapshot is taken at drag start (onNodeDragStart). Here we just update metadata.
           const ts = nowIso();
           const ids = new Set(dragEndIds);
-          newNodes = newNodes.map((n) =>
+          const nodesWithTs = newNodes.map((n) =>
             ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
           );
           const next = new Set(get().dirtyNodeIds);
           dragEndIds.forEach((id) => next.add(id));
-          set({ nodes: newNodes, dirtyNodeIds: next });
+          set({ nodes: nodesWithTs, dirtyNodeIds: next });
         } else {
-          // Selections, dimensions, intermediate drag — no undo entry
-          const temporal = (useStore as any).temporal?.getState?.();
-          temporal?.pause();
           set({ nodes: newNodes });
-          temporal?.resume();
         }
       },
 
       onEdgesChange: (changes: EdgeChange<TechEdge>[]) => {
+        if (_restoringHistory) return;
+
         const currentEdges = get().edges;
         const removedIds: string[] = [];
         for (const c of changes) {
@@ -258,7 +328,7 @@ export const useStore = create<AppState>()(
         }
         const newEdges = applyEdgeChanges(changes, currentEdges);
         if (removedIds.length > 0) {
-          // Edge removed — record undo entry + mark dirty
+          get()._pushSnapshot();
           const ts = nowIso();
           const ids = new Set(removedIds);
           const newNodes = get().nodes.map((n) =>
@@ -268,15 +338,12 @@ export const useStore = create<AppState>()(
           removedIds.forEach((id) => next.add(id));
           set({ nodes: newNodes, edges: newEdges, dirtyNodeIds: next });
         } else {
-          // Selection/other non-destructive edge changes — no undo entry
-          const temporal = (useStore as any).temporal?.getState?.();
-          temporal?.pause();
           set({ edges: newEdges });
-          temporal?.resume();
         }
       },
 
       onConnect: (connection: Connection) => {
+        get()._pushSnapshot();
         const next = new Set(get().dirtyNodeIds);
         const ids = new Set<string>();
         if (connection.source) { next.add(connection.source); ids.add(connection.source); }
@@ -295,8 +362,7 @@ export const useStore = create<AppState>()(
       setNodes: (nodes) => set({ nodes }),
       setEdges: (edges) => set({ edges }),
       replaceNodesAndEdgesForSync: (nodes, edges, notionFieldColors, replaceColors = false) => {
-        const temporal = (useStore as any).temporal?.getState?.();
-        temporal?.pause();
+        get().clearHistory();
         let nextColors = get().notionFieldColors;
         if (notionFieldColors && Object.keys(notionFieldColors).length > 0) {
           nextColors = replaceColors
@@ -316,10 +382,10 @@ export const useStore = create<AppState>()(
           dirtyNodeIds: new Set<string>(),
           ...(notionFieldColors ? { notionFieldColors: nextColors } : {}),
         });
-        temporal?.resume();
       },
 
       addNode: (node) => {
+        get()._pushSnapshot();
         const next = new Set(get().dirtyNodeIds);
         next.add(node.id);
         const nodeWithTs = {
@@ -330,6 +396,7 @@ export const useStore = create<AppState>()(
       },
 
       deleteNodes: (nodeIds) => {
+        get()._pushSnapshot();
         set({
           nodes: get().nodes.filter((node) => !nodeIds.includes(node.id)),
           edges: get().edges.filter(
@@ -339,6 +406,7 @@ export const useStore = create<AppState>()(
       },
 
       updateNodeData: (id, data) => {
+        get()._pushSnapshot();
         const next = new Set(get().dirtyNodeIds);
         next.add(id);
         const ts = nowIso();
@@ -355,13 +423,14 @@ export const useStore = create<AppState>()(
       setProjectName: (name) => set({ meta: { ...get().meta, name } }),
 
       loadProject: (project) => {
+        get().clearHistory();
         const loadedSettings = project.settings || {};
         set({
-            nodes: project.nodes || [],
-            edges: project.edges || [],
-            meta: project.meta || defaultMeta,
-            settings: { ...defaultSettings, ...loadedSettings },
-            notionFieldColors: project.notionFieldColors || {},
+          nodes: project.nodes || [],
+          edges: project.edges || [],
+          meta: project.meta || defaultMeta,
+          settings: { ...defaultSettings, ...loadedSettings },
+          notionFieldColors: project.notionFieldColors || {},
         });
       },
 
@@ -420,13 +489,4 @@ export const useStore = create<AppState>()(
         localStorage.setItem(THEME_STORAGE_KEY, theme);
         set((state) => ({ ui: { ...state.ui, theme } }));
       },
-    }),
-    {
-      partialize: (state) => ({
-        nodes: state.nodes,
-        edges: state.edges,
-      }),
-      limit: 50,
-    }
-  )
-);
+}));

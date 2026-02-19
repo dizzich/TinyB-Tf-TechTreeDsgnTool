@@ -27,24 +27,6 @@ import { COLOR_BY_OPTIONS } from './ColorMappingModal';
 import { FilterBuilder } from './FilterBuilder';
 import { buildUniqueValuesMap } from '../utils/filterUtils';
 
-const doUndo = () => {
-  const temporal = useStore.temporal.getState();
-  temporal.pause();
-  temporal.undo();
-  temporal.resume();
-  const { nodes } = useStore.getState();
-  useStore.getState().markNodesDirty(nodes.map((n) => n.id));
-};
-
-const doRedo = () => {
-  const temporal = useStore.temporal.getState();
-  temporal.pause();
-  temporal.redo();
-  temporal.resume();
-  const { nodes } = useStore.getState();
-  useStore.getState().markNodesDirty(nodes.map((n) => n.id));
-};
-
 export const Toolbar = () => {
   const nodes = useStore((state) => state.nodes);
   const edges = useStore((state) => state.edges);
@@ -58,6 +40,9 @@ export const Toolbar = () => {
   const loadProject = useStore((state) => state.loadProject);
   const setModalOpen = useStore((state) => state.setModalOpen);
   const updateSettings = useStore((state) => state.updateSettings);
+  const _pushSnapshot = useStore((state) => state._pushSnapshot);
+  const canUndo = useStore((state) => state._history.past.length > 0);
+  const canRedo = useStore((state) => state._history.future.length > 0);
 
   const notionConfig = useStore((state) => state.notionConfig);
   const syncInProgress = useStore((state) => state.syncInProgress);
@@ -140,6 +125,7 @@ export const Toolbar = () => {
   };
 
   const handleAutoLayout = () => {
+    _pushSnapshot();
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       nodes,
       edges,
@@ -182,11 +168,8 @@ export const Toolbar = () => {
       selected: true,
     };
 
-    const t = useStore.temporal.getState();
-    t.pause();
     const updatedNodes = nodes.map((n) => ({ ...n, selected: false }));
     setNodes(updatedNodes);
-    t.resume();
     addNode(newNode);
   };
 
@@ -504,8 +487,9 @@ export const Toolbar = () => {
       <div className="flex items-center gap-1">
         <button
           type="button"
-          onClick={doUndo}
-          className={iconBtnClass}
+          onClick={() => useStore.getState().undo()}
+          disabled={!canUndo}
+          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed`}
           title="Отменить"
           aria-label="Отменить"
         >
@@ -513,8 +497,9 @@ export const Toolbar = () => {
         </button>
         <button
           type="button"
-          onClick={doRedo}
-          className={iconBtnClass}
+          onClick={() => useStore.getState().redo()}
+          disabled={!canRedo}
+          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed`}
           title="Повторить"
           aria-label="Повторить"
         >
