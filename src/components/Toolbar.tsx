@@ -17,9 +17,23 @@ import {
   Minus,
   CornerDownRight,
   Eye,
+  AlignLeft,
+  AlignRight,
+  AlignStartVertical,
+  AlignEndVertical,
+  ArrowLeftRight,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { getLayoutedElements } from '../utils/autoLayout';
+import {
+  alignLeft,
+  alignRight,
+  alignTop,
+  alignBottom,
+  distributeHorizontally,
+  distributeVertically,
+} from '../utils/layoutHelpers';
 import { useFileSystem } from '../hooks/useFileSystem';
 import { useNotionSyncActions } from '../hooks/useNotionSyncActions';
 import { ProjectFile, EdgeType } from '../types';
@@ -135,6 +149,43 @@ export const Toolbar = () => {
     setEdges([...layoutedEdges]);
   };
 
+  const selectedIds = React.useMemo(
+    () => new Set(nodes.filter((n) => n.selected).map((n) => n.id)),
+    [nodes]
+  );
+  const hasSelection = selectedIds.size > 0;
+
+  const handleAlignLeft = () => {
+    if (!hasSelection) return;
+    _pushSnapshot();
+    setNodes(alignLeft(nodes, selectedIds));
+  };
+  const handleAlignRight = () => {
+    if (!hasSelection) return;
+    _pushSnapshot();
+    setNodes(alignRight(nodes, selectedIds));
+  };
+  const handleAlignTop = () => {
+    if (!hasSelection) return;
+    _pushSnapshot();
+    setNodes(alignTop(nodes, selectedIds));
+  };
+  const handleAlignBottom = () => {
+    if (!hasSelection) return;
+    _pushSnapshot();
+    setNodes(alignBottom(nodes, selectedIds));
+  };
+  const handleDistributeH = () => {
+    if (!hasSelection) return;
+    _pushSnapshot();
+    setNodes(distributeHorizontally(nodes, selectedIds));
+  };
+  const handleDistributeV = () => {
+    if (!hasSelection) return;
+    _pushSnapshot();
+    setNodes(distributeVertically(nodes, selectedIds));
+  };
+
   const handleSave = async () => {
     const projectData: ProjectFile = {
       version: '1.0',
@@ -246,6 +297,67 @@ export const Toolbar = () => {
           aria-label="Авто-размещение"
         >
           <Layout size={18} strokeWidth={1.75} />
+        </button>
+
+        <button
+          type="button"
+          onClick={handleAlignLeft}
+          disabled={!hasSelection}
+          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
+          title="Выровнять по левому краю"
+          aria-label="Выровнять по левому краю"
+        >
+          <AlignLeft size={18} strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          onClick={handleAlignRight}
+          disabled={!hasSelection}
+          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
+          title="Выровнять по правому краю"
+          aria-label="Выровнять по правому краю"
+        >
+          <AlignRight size={18} strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          onClick={handleAlignTop}
+          disabled={!hasSelection}
+          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
+          title="Выровнять по верхнему краю"
+          aria-label="Выровнять по верхнему краю"
+        >
+          <AlignStartVertical size={18} strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          onClick={handleAlignBottom}
+          disabled={!hasSelection}
+          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
+          title="Выровнять по нижнему краю"
+          aria-label="Выровнять по нижнему краю"
+        >
+          <AlignEndVertical size={18} strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          onClick={handleDistributeH}
+          disabled={!hasSelection}
+          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
+          title="Распределить по горизонтали"
+          aria-label="Распределить по горизонтали"
+        >
+          <ArrowLeftRight size={18} strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          onClick={handleDistributeV}
+          disabled={!hasSelection}
+          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
+          title="Распределить по вертикали"
+          aria-label="Распределить по вертикали"
+        >
+          <ArrowUpDown size={18} strokeWidth={1.75} />
         </button>
 
         <div className="h-5 w-px bg-panel-border mx-1" aria-hidden />

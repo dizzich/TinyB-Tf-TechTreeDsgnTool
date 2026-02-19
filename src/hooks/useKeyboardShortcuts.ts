@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { useFileSystem } from './useFileSystem';
 import { ProjectFile } from '../types';
+import { nodeMatchesRules } from '../utils/filterUtils';
 
 export const useKeyboardShortcuts = () => {
   const { saveProject, openProject } = useFileSystem();
@@ -13,6 +14,7 @@ export const useKeyboardShortcuts = () => {
   const loadProject = useStore((state) => state.loadProject);
   const setNodes = useStore((state) => state.setNodes);
   const modals = useStore((state) => state.modals);
+  const canvasFilter = useStore((state) => state.canvasFilter);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -71,10 +73,15 @@ export const useKeyboardShortcuts = () => {
         return;
       }
 
-      // Ctrl/Cmd + A: Select all nodes (no undo entry)
+      // Ctrl/Cmd + A: Select all nodes; when canvas filter is on with rules, only nodes passing the filter (dimmed not selected)
       if (modifier && code === 'KeyA') {
         event.preventDefault();
-        const updatedNodes = nodes.map((n) => ({ ...n, selected: true }));
+        const useFilter = canvasFilter.enabled && (canvasFilter.rules?.length ?? 0) > 0;
+        const rules = canvasFilter.rules ?? [];
+        const updatedNodes = nodes.map((n) => ({
+          ...n,
+          selected: useFilter ? nodeMatchesRules(n, rules) : true,
+        }));
         setNodes(updatedNodes);
         return;
       }
@@ -97,6 +104,7 @@ export const useKeyboardShortcuts = () => {
     settings,
     modals,
     notionFieldColors,
+    canvasFilter,
     saveProject,
     openProject,
     loadProject,
