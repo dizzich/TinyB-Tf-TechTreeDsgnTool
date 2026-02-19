@@ -18,6 +18,8 @@ export const useNotionPullOnFocus = () => {
   const { doPull } = useNotionSyncActions();
   const notionConfig = useStore((s) => s.notionConfig);
   const notionConnected = useStore((s) => s.notionConnected);
+  const allowBackgroundSync = useStore((s) => s.allowBackgroundSync);
+  const syncMode = useStore((s) => s.syncMode);
   const notionCorsProxy = useStore((s) => s.notionCorsProxy);
   const doPullRef = useRef(doPull);
   doPullRef.current = doPull;
@@ -28,6 +30,9 @@ export const useNotionPullOnFocus = () => {
       if (
         !state.notionConfig ||
         !state.notionConnected ||
+        !state.allowBackgroundSync ||
+        state.syncMode === 'pause' ||
+        (state.syncMode !== 'pull' && state.syncMode !== 'bidirectional') ||
         state.syncInProgress
       )
         return;
@@ -42,7 +47,7 @@ export const useNotionPullOnFocus = () => {
           useStore.getState().setNotionHasRemoteUpdates(true);
           // Auto-pull only if notionSourceOfTruth is enabled and no local dirty nodes
           const current = useStore.getState();
-          if (current.notionSourceOfTruth && current.dirtyNodeIds.size === 0) {
+          if ((current.syncMode === 'pull' || current.syncMode === 'bidirectional') && current.dirtyNodeIds.size === 0) {
             doPullRef.current();
           }
         }
@@ -53,5 +58,5 @@ export const useNotionPullOnFocus = () => {
 
     window.addEventListener('focus', handler);
     return () => window.removeEventListener('focus', handler);
-  }, [notionConfig, notionConnected, notionCorsProxy]);
+  }, [notionConfig, notionConnected, allowBackgroundSync, syncMode, notionCorsProxy]);
 };

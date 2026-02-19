@@ -41,7 +41,12 @@ interface AppState {
   lastSyncResult: SyncResult | null;
   lastSyncTime: string | null;
   lastSyncError: string | null;
+  /** @deprecated use syncMode instead */
   notionSourceOfTruth: boolean;
+  /** When false, no auto-sync until user explicitly chooses an action in Notion Sync modal */
+  allowBackgroundSync: boolean;
+  /** Background sync mode: push (graph→Notion), pull (Notion→graph), bidirectional, or pause */
+  syncMode: import('../types').SyncMode;
   notionDirty: boolean;
   notionHasRemoteUpdates: boolean;
   dirtyNodeIds: Set<string>;
@@ -108,6 +113,8 @@ interface AppState {
   setLastSyncTime: (time: string | null) => void;
   setLastSyncError: (error: string | null) => void;
   setNotionSourceOfTruth: (enabled: boolean) => void;
+  setAllowBackgroundSync: (allowed: boolean) => void;
+  setSyncMode: (mode: import('../types').SyncMode) => void;
   setNotionDirty: (dirty: boolean) => void;
   setNotionHasRemoteUpdates: (has: boolean) => void;
   markNodesDirty: (ids: string[]) => void;
@@ -254,6 +261,8 @@ export const useStore = create<AppState>()((set, get) => ({
       lastSyncTime: loadLastSyncTime(loadNotionConfig()?.databaseId),
       lastSyncError: null,
       notionSourceOfTruth: false,
+      allowBackgroundSync: false,
+      syncMode: 'pause',
       notionDirty: false,
       notionHasRemoteUpdates: false,
       dirtyNodeIds: new Set<string>(),
@@ -442,13 +451,17 @@ export const useStore = create<AppState>()((set, get) => ({
         set({
           notionConfig: config,
           lastSyncTime: config ? loadLastSyncTime(config.databaseId) : null,
+          ...(config ? {} : { allowBackgroundSync: false }),
         });
       },
       setNotionCorsProxy: (proxy) => {
         localStorage.setItem('techtree_notion_cors_proxy', proxy);
         set({ notionCorsProxy: proxy });
       },
-      setNotionConnected: (connected) => set({ notionConnected: connected }),
+      setNotionConnected: (connected) => set({
+        notionConnected: connected,
+        ...(connected ? {} : { allowBackgroundSync: false }),
+      }),
       setSyncInProgress: (inProgress) => set({
         syncInProgress: inProgress,
         ...(inProgress ? {} : { syncProgress: null }),
@@ -460,7 +473,15 @@ export const useStore = create<AppState>()((set, get) => ({
         set({ lastSyncTime: time, lastSyncError: null });
       },
       setLastSyncError: (error) => set({ lastSyncError: error }),
-      setNotionSourceOfTruth: (enabled) => set({ notionSourceOfTruth: enabled }),
+      setNotionSourceOfTruth: (enabled) => set({
+        notionSourceOfTruth: enabled,
+        syncMode: enabled ? (get().syncMode === 'pause' ? 'bidirectional' : get().syncMode) : 'pause',
+      }),
+      setAllowBackgroundSync: (allowed) => set({ allowBackgroundSync: allowed }),
+      setSyncMode: (mode) => set({
+        syncMode: mode,
+        notionSourceOfTruth: mode !== 'pause',
+      }),
       setNotionDirty: (dirty) => set({ notionDirty: dirty }),
       setNotionHasRemoteUpdates: (has) => set({ notionHasRemoteUpdates: has }),
       markNodesDirty: (ids) => {

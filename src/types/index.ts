@@ -145,11 +145,14 @@ export interface NotionColumnMapping {
   notionSyncStatus: string;
   /** Notion property (rich_text) → Editor node position as JSON {"x":num,"y":num} */
   editorPosition: string;
-  /** Notion property (rich_text) → OpenCondition */
+  /** Notion property (relation) → OpenCondition; push uses relation, pull can also read rich_text/rollup */
   openCondition?: string;
 }
 
 export type SyncDirection = 'pull' | 'push' | 'bidirectional';
+
+/** Background sync mode: what runs in real time when connected */
+export type SyncMode = 'push' | 'pull' | 'bidirectional' | 'pause';
 
 export interface SyncResult {
   added: number;

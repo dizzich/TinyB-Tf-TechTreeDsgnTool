@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useRef, useCallback, useEffect } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { useStore } from '../store/useStore';
 import { renderTemplate } from '../utils/template';
@@ -13,8 +13,58 @@ const DEFAULT_NODE_MIN_WIDTH = 200;
 const DEFAULT_NODE_MAX_WIDTH = 320;
 const DEFAULT_NODE_MIN_HEIGHT = 48;
 
+const CLICK_MAX_MS = 400;
+const CLICK_MAX_DIST_PX = 8;
+
 const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected?: boolean; id?: string }) => {
   const isHighlighted = selected || data?.edgeHighlighted;
+  const edges = useStore((state) => state.edges);
+  const setConnectedSubgraphHighlight = useStore((state) => state.setConnectedSubgraphHighlight);
+  const pointerDownRef = useRef<{ x: number; y: number; time: number; type: 'source' | 'target' } | null>(null);
+  const pointerUpHandlerRef = useRef<((e: PointerEvent) => void) | null>(null);
+
+  const handleConnectorPointerDown = useCallback(
+    (ev: React.PointerEvent, type: 'source' | 'target') => {
+      pointerDownRef.current = { x: ev.clientX, y: ev.clientY, time: Date.now(), type };
+      const up = (e: PointerEvent) => {
+        document.removeEventListener('pointerup', up);
+        pointerUpHandlerRef.current = null;
+        const down = pointerDownRef.current;
+        pointerDownRef.current = null;
+        if (!down || down.type !== type || !id) return;
+        const dt = Date.now() - down.time;
+        const dx = e.clientX - down.x;
+        const dy = e.clientY - down.y;
+        if (dt < CLICK_MAX_MS && dx * dx + dy * dy < CLICK_MAX_DIST_PX * CLICK_MAX_DIST_PX) {
+          if (type === 'target') {
+            const incoming = edges.filter((edge) => edge.target === id);
+            const edgeIds = new Set(incoming.map((edge) => edge.id));
+            const nodeIds = new Set<string>([id, ...incoming.map((edge) => edge.source)]);
+            setConnectedSubgraphHighlight({ nodeIds, edgeIds });
+          } else {
+            const outgoing = edges.filter((edge) => edge.source === id);
+            const edgeIds = new Set(outgoing.map((edge) => edge.id));
+            const nodeIds = new Set<string>([id, ...outgoing.map((edge) => edge.target)]);
+            setConnectedSubgraphHighlight({ nodeIds, edgeIds });
+          }
+        }
+      };
+      pointerUpHandlerRef.current = up;
+      document.addEventListener('pointerup', up);
+    },
+    [id, edges, setConnectedSubgraphHighlight]
+  );
+
+  useEffect(() => {
+    return () => {
+      const handler = pointerUpHandlerRef.current;
+      if (handler) {
+        document.removeEventListener('pointerup', handler);
+        pointerUpHandlerRef.current = null;
+      }
+    };
+  }, []);
+
   const template = useStore((state) => state.settings.nodeTemplate);
   const nodeColorBy = useStore((state) => state.settings.nodeColorBy) ?? 'category';
   const nodeColorPalette = useStore((state) => state.settings.nodeColorPalette);
@@ -52,11 +102,14 @@ const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected
       )}
       style={{ ...sizeStyle, ...presetStyles.style }}
     >
-      <Handle
-        type="target"
-        position={Position.Left}
-        className="!w-3.5 !h-3.5 !bg-control-border hover:!bg-accent !border-0 !rounded-full"
-      />
+      <span data-connector-click style={{ display: 'contents' }}>
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="!w-3.5 !h-3.5 !bg-control-border hover:!bg-accent !border-0 !rounded-full"
+          onPointerDown={(e) => handleConnectorPointerDown(e, 'target')}
+        />
+      </span>
       <div className="flex flex-1 min-h-0">
         {presetStyles.showLeftStrip && (
           <div
@@ -126,11 +179,14 @@ const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected
           </a>
         )}
       </div>
-      <Handle
-        type="source"
-        position={Position.Right}
-        className="!w-3.5 !h-3.5 !bg-control-border hover:!bg-accent !border-0 !rounded-full"
-      />
+      <span data-connector-click style={{ display: 'contents' }}>
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="!w-3.5 !h-3.5 !bg-control-border hover:!bg-accent !border-0 !rounded-full"
+          onPointerDown={(e) => handleConnectorPointerDown(e, 'source')}
+        />
+      </span>
     </div>
   );
 };

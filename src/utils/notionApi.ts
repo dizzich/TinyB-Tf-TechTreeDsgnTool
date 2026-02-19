@@ -851,19 +851,29 @@ const buildNotionProperties = (
   if (data.powerType) {
     props[cm.powerType] = { select: { name: data.powerType } };
   }
+  // Status properties (Notion type "status", not "select")
   if (data.gameStatus) {
-    props[cm.gameStatus] = { select: { name: data.gameStatus } };
+    props[cm.gameStatus] = { status: { name: data.gameStatus } };
   }
   if (data.designStatus) {
-    props[cm.designStatus] = { select: { name: data.designStatus } };
+    props[cm.designStatus] = { status: { name: data.designStatus } };
   }
   if (data.notionSyncStatus) {
-    props[cm.notionSyncStatus] = { select: { name: data.notionSyncStatus } };
+    props[cm.notionSyncStatus] = { status: { name: data.notionSyncStatus } };
   }
-  if (cm.openCondition && data.openCondition) {
-    props[cm.openCondition] = {
-      rich_text: [{ text: { content: data.openCondition } }],
-    };
+  // OpenCondition: Notion type "relation" — build from openConditionRefs (pageId or resolve by name via nodeMap)
+  if (cm.openCondition && data.openConditionRefs?.length) {
+    const openConditionRelation = data.openConditionRefs
+      .map((ref) => {
+        if (ref.pageId) return ref.pageId;
+        const byName = Array.from(nodeMap.values()).find((n) => n.data?.label === ref.name);
+        return byName?.data?.notionPageId;
+      })
+      .filter(Boolean)
+      .map((pageId) => ({ id: pageId as string }));
+    if (openConditionRelation.length > 0) {
+      props[cm.openCondition] = { relation: openConditionRelation };
+    }
   }
 
   // Relations: PrevTechs — O(1) lookups via nodeMap
@@ -1027,8 +1037,10 @@ export const bidirectionalSync = async (
     if (remoteNode) {
       processedRemoteIds.add(remoteNode.id);
 
-      // Compare timestamps — newer wins
-      const localTime = new Date(localNode.data.updatedAt || 0).getTime();
+      // Compare timestamps — newer wins (use localModifiedAt when set so local edits win)
+      const localUpdated = new Date(localNode.data.updatedAt || 0).getTime();
+      const localModified = new Date(localNode.data.localModifiedAt || 0).getTime();
+      const localTime = Math.max(localUpdated, localModified);
       const remoteTime = new Date(remoteNode.data.updatedAt || 0).getTime();
 
       if (remoteTime > localTime) {

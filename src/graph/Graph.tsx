@@ -129,6 +129,14 @@ export const Graph = () => {
     setConnectedSubgraphHighlight(null);
   }, [setConnectedSubgraphHighlight]);
 
+  const handleNodeClick = useCallback(
+    (event: React.MouseEvent) => {
+      if ((event.target as Element).closest?.('[data-connector-click]')) return;
+      clearHighlight();
+    },
+    [clearHighlight]
+  );
+
   // Handle keyboard events for deletion
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
@@ -157,7 +165,7 @@ export const Graph = () => {
         onNodeDragStart={onNodeDragStart}
         onEdgeClick={handleEdgeClick}
         onPaneClick={clearHighlight}
-        onNodeClick={clearHighlight}
+        onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
         fitView
         className="bg-workspace-bg"

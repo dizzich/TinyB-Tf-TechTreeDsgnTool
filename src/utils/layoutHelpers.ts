@@ -69,6 +69,76 @@ export function alignBottom(nodes: TechNode[], ids: Set<string>): TechNode[] {
   return nodes.map((n) => byId.get(n.id) ?? n);
 }
 
+export function alignCenterHorizontal(nodes: TechNode[], ids: Set<string>): TechNode[] {
+  const selected = getNodesByIds(nodes, ids);
+  if (selected.length === 0) return [...nodes];
+  const minLeft = Math.min(...selected.map((n) => n.position.x));
+  const maxRight = Math.max(
+    ...selected.map((n) => n.position.x + getNodeSize(n).width)
+  );
+  const centerX = (minLeft + maxRight) / 2;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const n of selected) {
+    const { width } = getNodeSize(n);
+    byId.set(n.id, { ...n, position: { ...n.position, x: centerX - width / 2 } });
+  }
+  return nodes.map((n) => byId.get(n.id) ?? n);
+}
+
+export function alignCenterVertical(nodes: TechNode[], ids: Set<string>): TechNode[] {
+  const selected = getNodesByIds(nodes, ids);
+  if (selected.length === 0) return [...nodes];
+  const minTop = Math.min(...selected.map((n) => n.position.y));
+  const maxBottom = Math.max(
+    ...selected.map((n) => n.position.y + getNodeSize(n).height)
+  );
+  const centerY = (minTop + maxBottom) / 2;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const n of selected) {
+    const { height } = getNodeSize(n);
+    byId.set(n.id, { ...n, position: { ...n.position, y: centerY - height / 2 } });
+  }
+  return nodes.map((n) => byId.get(n.id) ?? n);
+}
+
+export function stackHorizontally(nodes: TechNode[], ids: Set<string>, gap = 40): TechNode[] {
+  const selected = getNodesByIds(nodes, ids);
+  if (selected.length === 0) return [...nodes];
+  const withSize = selected.map((n) => ({ node: n, ...getNodeSize(n) }));
+  const byCenterX = (n: (typeof withSize)[0]) => n.node.position.x + n.width / 2;
+  withSize.sort((a, b) => byCenterX(a) - byCenterX(b));
+  let x = withSize[0].node.position.x;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const baseY = withSize[0].node.position.y;
+  withSize.forEach(({ node, width }) => {
+    byId.set(node.id, {
+      ...node,
+      position: { x, y: baseY },
+    });
+    x += width + gap;
+  });
+  return nodes.map((n) => byId.get(n.id) ?? n);
+}
+
+export function stackVertically(nodes: TechNode[], ids: Set<string>, gap = 40): TechNode[] {
+  const selected = getNodesByIds(nodes, ids);
+  if (selected.length === 0) return [...nodes];
+  const withSize = selected.map((n) => ({ node: n, ...getNodeSize(n) }));
+  const byCenterY = (n: (typeof withSize)[0]) => n.node.position.y + n.height / 2;
+  withSize.sort((a, b) => byCenterY(a) - byCenterY(b));
+  let y = withSize[0].node.position.y;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const baseX = withSize[0].node.position.x;
+  withSize.forEach(({ node, height }) => {
+    byId.set(node.id, {
+      ...node,
+      position: { x: baseX, y },
+    });
+    y += height + gap;
+  });
+  return nodes.map((n) => byId.get(n.id) ?? n);
+}
+
 export function distributeHorizontally(nodes: TechNode[], ids: Set<string>): TechNode[] {
   const selected = getNodesByIds(nodes, ids);
   if (selected.length <= 2) return [...nodes];

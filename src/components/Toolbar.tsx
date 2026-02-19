@@ -12,6 +12,7 @@ import {
   RefreshCw,
   ChevronDown,
   AlertCircle,
+  Pause,
   Palette,
   Spline,
   Minus,
@@ -21,22 +22,29 @@ import {
   AlignRight,
   AlignStartVertical,
   AlignEndVertical,
+  AlignCenterHorizontal,
+  AlignCenterVertical,
   ArrowLeftRight,
   ArrowUpDown,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import { getLayoutedElements } from '../utils/autoLayout';
+import { getLayoutedElements, layoutSubgraph } from '../utils/autoLayout';
+import type { LayoutDirection } from '../utils/autoLayout';
 import {
   alignLeft,
   alignRight,
   alignTop,
   alignBottom,
+  alignCenterHorizontal,
+  alignCenterVertical,
   distributeHorizontally,
   distributeVertically,
+  stackHorizontally,
+  stackVertically,
 } from '../utils/layoutHelpers';
 import { useFileSystem } from '../hooks/useFileSystem';
 import { useNotionSyncActions } from '../hooks/useNotionSyncActions';
-import { ProjectFile, EdgeType } from '../types';
+import { ProjectFile, EdgeType, TechNode } from '../types';
 import { COLOR_BY_OPTIONS } from './ColorMappingModal';
 import { FilterBuilder } from './FilterBuilder';
 import { buildUniqueValuesMap } from '../utils/filterUtils';
@@ -61,7 +69,7 @@ export const Toolbar = () => {
   const notionConfig = useStore((state) => state.notionConfig);
   const syncInProgress = useStore((state) => state.syncInProgress);
   const syncProgress = useStore((state) => state.syncProgress);
-  const notionSourceOfTruth = useStore((state) => state.notionSourceOfTruth);
+  const syncMode = useStore((state) => state.syncMode);
   const notionDirty = useStore((state) => state.notionDirty);
   const dirtyNodeIds = useStore((state) => state.dirtyNodeIds);
   const lastSyncError = useStore((state) => state.lastSyncError);
@@ -76,6 +84,8 @@ export const Toolbar = () => {
   const edgeMenuRef = useRef<HTMLDivElement>(null);
   const [canvasFilterOpen, setCanvasFilterOpen] = useState(false);
   const canvasFilterRef = useRef<HTMLDivElement>(null);
+  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
+  const layoutMenuRef = useRef<HTMLDivElement>(null);
 
   const canvasFilter = useStore((state) => state.canvasFilter);
   const setCanvasFilter = useStore((state) => state.setCanvasFilter);
@@ -120,6 +130,16 @@ export const Toolbar = () => {
     return () => document.removeEventListener('click', close);
   }, [canvasFilterOpen]);
 
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (layoutMenuRef.current && !layoutMenuRef.current.contains(e.target as Node)) {
+        setLayoutMenuOpen(false);
+      }
+    };
+    if (layoutMenuOpen) document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [layoutMenuOpen]);
+
   const EDGE_TYPE_OPTIONS: { value: EdgeType; label: string; icon: typeof Spline }[] = [
     { value: 'default', label: 'Изогнутые', icon: Spline },
     { value: 'straight', label: 'Прямые', icon: Minus },
@@ -138,53 +158,36 @@ export const Toolbar = () => {
     setCanvasFilter({ rules });
   };
 
-  const handleAutoLayout = () => {
-    _pushSnapshot();
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-      nodes,
-      edges,
-      settings.layoutDirection
-    );
-    setNodes([...layoutedNodes]);
-    setEdges([...layoutedEdges]);
-  };
-
   const selectedIds = React.useMemo(
     () => new Set(nodes.filter((n) => n.selected).map((n) => n.id)),
     [nodes]
   );
   const hasSelection = selectedIds.size > 0;
 
-  const handleAlignLeft = () => {
-    if (!hasSelection) return;
+  const handleAutoLayoutFull = (direction: LayoutDirection) => {
+    setLayoutMenuOpen(false);
     _pushSnapshot();
-    setNodes(alignLeft(nodes, selectedIds));
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges, direction);
+    setNodes([...layoutedNodes]);
+    setEdges([...layoutedEdges]);
   };
-  const handleAlignRight = () => {
+
+  const handleLayoutSubgraph = (direction: LayoutDirection) => {
     if (!hasSelection) return;
+    setLayoutMenuOpen(false);
     _pushSnapshot();
-    setNodes(alignRight(nodes, selectedIds));
+    setNodes(layoutSubgraph(nodes, edges, selectedIds, direction));
   };
-  const handleAlignTop = () => {
+
+  const runLayoutAction = (fn: () => TechNode[]) => {
     if (!hasSelection) return;
+    setLayoutMenuOpen(false);
     _pushSnapshot();
-    setNodes(alignTop(nodes, selectedIds));
+    setNodes(fn());
   };
-  const handleAlignBottom = () => {
-    if (!hasSelection) return;
-    _pushSnapshot();
-    setNodes(alignBottom(nodes, selectedIds));
-  };
-  const handleDistributeH = () => {
-    if (!hasSelection) return;
-    _pushSnapshot();
-    setNodes(distributeHorizontally(nodes, selectedIds));
-  };
-  const handleDistributeV = () => {
-    if (!hasSelection) return;
-    _pushSnapshot();
-    setNodes(distributeVertically(nodes, selectedIds));
-  };
+
+  const menuItemClass = (disabled?: boolean) =>
+    `w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-control-hover-bg ${disabled ? 'opacity-50 pointer-events-none' : 'text-text'}`;
 
   const handleSave = async () => {
     const projectData: ProjectFile = {
@@ -289,76 +292,114 @@ export const Toolbar = () => {
 
         <div className="h-5 w-px bg-panel-border mx-1" aria-hidden />
 
-        <button
-          type="button"
-          onClick={handleAutoLayout}
-          className={iconBtnClass}
-          title="Авто-размещение"
-          aria-label="Авто-размещение"
-        >
-          <Layout size={18} strokeWidth={1.75} />
-        </button>
-
-        <button
-          type="button"
-          onClick={handleAlignLeft}
-          disabled={!hasSelection}
-          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
-          title="Выровнять по левому краю"
-          aria-label="Выровнять по левому краю"
-        >
-          <AlignLeft size={18} strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
-          onClick={handleAlignRight}
-          disabled={!hasSelection}
-          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
-          title="Выровнять по правому краю"
-          aria-label="Выровнять по правому краю"
-        >
-          <AlignRight size={18} strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
-          onClick={handleAlignTop}
-          disabled={!hasSelection}
-          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
-          title="Выровнять по верхнему краю"
-          aria-label="Выровнять по верхнему краю"
-        >
-          <AlignStartVertical size={18} strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
-          onClick={handleAlignBottom}
-          disabled={!hasSelection}
-          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
-          title="Выровнять по нижнему краю"
-          aria-label="Выровнять по нижнему краю"
-        >
-          <AlignEndVertical size={18} strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
-          onClick={handleDistributeH}
-          disabled={!hasSelection}
-          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
-          title="Распределить по горизонтали"
-          aria-label="Распределить по горизонтали"
-        >
-          <ArrowLeftRight size={18} strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
-          onClick={handleDistributeV}
-          disabled={!hasSelection}
-          className={`${iconBtnClass} disabled:opacity-50 disabled:pointer-events-none`}
-          title="Распределить по вертикали"
-          aria-label="Распределить по вертикали"
-        >
-          <ArrowUpDown size={18} strokeWidth={1.75} />
-        </button>
+        {/* Layout dropdown */}
+        <div className="relative" ref={layoutMenuRef}>
+          <button
+            type="button"
+            onClick={() => setLayoutMenuOpen((o) => !o)}
+            className={`${iconBtnClass} w-auto px-2 flex items-center gap-1.5`}
+            title="Лейаут / размещение"
+            aria-label="Лейаут"
+          >
+            <Layout size={18} strokeWidth={1.75} />
+            <ChevronDown
+              size={12}
+              strokeWidth={1.75}
+              className={`transition-transform ${layoutMenuOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {layoutMenuOpen && (
+            <div
+              className="absolute top-full left-0 mt-1 py-1 min-w-[240px] rounded-control border border-panel-border bg-panel shadow-floating z-50 max-h-[70vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted">Авто-размещение (весь граф)</div>
+              {(['LR', 'RL', 'TB', 'BT'] as const).map((dir) => (
+                <button
+                  key={dir}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => handleAutoLayoutFull(dir)}
+                  className={menuItemClass()}
+                >
+                  <Layout size={16} strokeWidth={1.75} />
+                  {dir === 'LR' && 'Дерево слева направо (LR)'}
+                  {dir === 'RL' && 'Дерево справа налево (RL)'}
+                  {dir === 'TB' && 'Дерево сверху вниз (TB)'}
+                  {dir === 'BT' && 'Дерево снизу вверх (BT)'}
+                </button>
+              ))}
+              <div className="my-1 border-t border-panel-border" />
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted">Авто-размещение (выделенные)</div>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => handleLayoutSubgraph('LR')}
+                disabled={!hasSelection}
+                className={menuItemClass(!hasSelection)}
+              >
+                <Layout size={16} strokeWidth={1.75} />
+                Дерево LR по выделенным
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => handleLayoutSubgraph('TB')}
+                disabled={!hasSelection}
+                className={menuItemClass(!hasSelection)}
+              >
+                <Layout size={16} strokeWidth={1.75} />
+                Дерево TB по выделенным
+              </button>
+              <div className="my-1 border-t border-panel-border" />
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted">Выравнивание</div>
+              <button type="button" role="menuitem" onClick={() => runLayoutAction(() => alignLeft(nodes, selectedIds))} disabled={!hasSelection} className={menuItemClass(!hasSelection)}>
+                <AlignLeft size={16} strokeWidth={1.75} />
+                По левому краю
+              </button>
+              <button type="button" role="menuitem" onClick={() => runLayoutAction(() => alignRight(nodes, selectedIds))} disabled={!hasSelection} className={menuItemClass(!hasSelection)}>
+                <AlignRight size={16} strokeWidth={1.75} />
+                По правому краю
+              </button>
+              <button type="button" role="menuitem" onClick={() => runLayoutAction(() => alignTop(nodes, selectedIds))} disabled={!hasSelection} className={menuItemClass(!hasSelection)}>
+                <AlignStartVertical size={16} strokeWidth={1.75} />
+                По верхнему краю
+              </button>
+              <button type="button" role="menuitem" onClick={() => runLayoutAction(() => alignBottom(nodes, selectedIds))} disabled={!hasSelection} className={menuItemClass(!hasSelection)}>
+                <AlignEndVertical size={16} strokeWidth={1.75} />
+                По нижнему краю
+              </button>
+              <button type="button" role="menuitem" onClick={() => runLayoutAction(() => alignCenterHorizontal(nodes, selectedIds))} disabled={!hasSelection} className={menuItemClass(!hasSelection)}>
+                <AlignCenterHorizontal size={16} strokeWidth={1.75} />
+                По центру (гориз.)
+              </button>
+              <button type="button" role="menuitem" onClick={() => runLayoutAction(() => alignCenterVertical(nodes, selectedIds))} disabled={!hasSelection} className={menuItemClass(!hasSelection)}>
+                <AlignCenterVertical size={16} strokeWidth={1.75} />
+                По центру (верт.)
+              </button>
+              <div className="my-1 border-t border-panel-border" />
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted">Распределение</div>
+              <button type="button" role="menuitem" onClick={() => runLayoutAction(() => distributeHorizontally(nodes, selectedIds))} disabled={!hasSelection} className={menuItemClass(!hasSelection)}>
+                <ArrowLeftRight size={16} strokeWidth={1.75} />
+                По горизонтали
+              </button>
+              <button type="button" role="menuitem" onClick={() => runLayoutAction(() => distributeVertically(nodes, selectedIds))} disabled={!hasSelection} className={menuItemClass(!hasSelection)}>
+                <ArrowUpDown size={16} strokeWidth={1.75} />
+                По вертикали
+              </button>
+              <div className="my-1 border-t border-panel-border" />
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted">Упорядочить</div>
+              <button type="button" role="menuitem" onClick={() => runLayoutAction(() => stackHorizontally(nodes, selectedIds))} disabled={!hasSelection} className={menuItemClass(!hasSelection)}>
+                <ArrowLeftRight size={16} strokeWidth={1.75} />
+                В ряд по горизонтали
+              </button>
+              <button type="button" role="menuitem" onClick={() => runLayoutAction(() => stackVertically(nodes, selectedIds))} disabled={!hasSelection} className={menuItemClass(!hasSelection)}>
+                <ArrowUpDown size={16} strokeWidth={1.75} />
+                В ряд по вертикали
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="h-5 w-px bg-panel-border mx-1" aria-hidden />
 
@@ -479,6 +520,75 @@ export const Toolbar = () => {
 
         <div className="h-5 w-px bg-panel-border mx-1" aria-hidden />
 
+        <div className="relative flex items-center min-w-[6rem]" ref={colorMenuRef}>
+          <button
+            type="button"
+            onClick={() => setModalOpen('colorMapping', true)}
+            className={`${iconBtnClass} w-auto min-w-[5rem] px-2 flex items-center gap-1.5 rounded-r-none -mr-px`}
+            title="Настройки цветов"
+            aria-label="Настройки цветов"
+          >
+            <Palette size={18} strokeWidth={1.75} />
+            <span className="text-xs font-medium truncate max-w-[4rem]">
+              {COLOR_BY_OPTIONS.find((o) => o.value === (settings.nodeColorBy ?? 'category'))?.label ?? 'Цвета'}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setColorMenuOpen((o) => !o);
+            }}
+            className="icon-btn w-6 h-9 flex items-center justify-center rounded-r-control rounded-l-none border border-control-border-muted text-muted hover:text-accent hover:border-accent/50 transition-all"
+            title="Быстрый выбор атрибута"
+            aria-label="Меню цветов"
+          >
+            <ChevronDown
+              size={14}
+              strokeWidth={1.75}
+              className={`transition-transform ${colorMenuOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {colorMenuOpen && (
+            <div
+              className="absolute top-full right-0 mt-1 py-1 min-w-[200px] rounded-control border border-panel-border bg-panel shadow-floating z-50"
+              role="menu"
+            >
+              {COLOR_BY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    updateSettings({ nodeColorBy: opt.value });
+                    setColorMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-control-hover-bg ${
+                    (settings.nodeColorBy ?? 'category') === opt.value ? 'text-accent bg-accent/10' : 'text-text'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              <div className="my-1 border-t border-panel-border" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setModalOpen('colorMapping', true);
+                  setColorMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-control-hover-bg"
+              >
+                <Settings size={16} strokeWidth={1.75} />
+                Настройки цветов...
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1">
         <div
           className="relative flex items-center min-w-[7.5rem] rounded-control has-[*:hover]:shadow-[0_0_10px_rgba(106,162,255,0.3)] has-[*:hover]:[&>button]:border-accent has-[*:hover]:[&>button]:bg-control-hover-bg has-[*:hover]:[&>button]:text-accent"
           ref={notionMenuRef}
@@ -498,7 +608,7 @@ export const Toolbar = () => {
                   ? 'Ошибка синхронизации'
                   : notionDirty && dirtyNodeIds.size > 0
                     ? `${dirtyNodeIds.size} несохранённых изменений`
-                    : 'Notion Sync'
+                    : `Notion Sync (режим: ${syncMode === 'push' ? 'Граф→Notion' : syncMode === 'pull' ? 'Notion→Граф' : syncMode === 'bidirectional' ? 'Двусторонне' : 'Пауза'})`
             }
             aria-label="Notion Sync"
           >
@@ -506,6 +616,12 @@ export const Toolbar = () => {
               <RefreshCw size={18} strokeWidth={1.75} className="animate-spin" />
             ) : lastSyncError ? (
               <AlertCircle size={18} strokeWidth={1.75} className="text-amber-400" />
+            ) : syncMode === 'push' ? (
+              <Upload size={18} strokeWidth={1.75} />
+            ) : syncMode === 'pull' ? (
+              <Download size={18} strokeWidth={1.75} />
+            ) : syncMode === 'pause' ? (
+              <Pause size={18} strokeWidth={1.75} />
             ) : (
               <RefreshCw size={18} strokeWidth={1.75} />
             )}
@@ -594,9 +710,9 @@ export const Toolbar = () => {
             </>
           )}
         </div>
-      </div>
 
-      <div className="flex items-center gap-1">
+        <div className="h-5 w-px bg-panel-border mx-1" aria-hidden />
+
         <button
           type="button"
           onClick={() => useStore.getState().undo()}
@@ -619,73 +735,6 @@ export const Toolbar = () => {
         </button>
 
         <div className="h-5 w-px bg-panel-border mx-1" aria-hidden />
-
-        <div className="relative flex items-center min-w-[6rem]" ref={colorMenuRef}>
-          <button
-            type="button"
-            onClick={() => setModalOpen('colorMapping', true)}
-            className={`${iconBtnClass} w-auto min-w-[5rem] px-2 flex items-center gap-1.5 rounded-r-none -mr-px`}
-            title="Настройки цветов"
-            aria-label="Настройки цветов"
-          >
-            <Palette size={18} strokeWidth={1.75} />
-            <span className="text-xs font-medium truncate max-w-[4rem]">
-              {COLOR_BY_OPTIONS.find((o) => o.value === (settings.nodeColorBy ?? 'category'))?.label ?? 'Цвета'}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setColorMenuOpen((o) => !o);
-            }}
-            className="icon-btn w-6 h-9 flex items-center justify-center rounded-r-control rounded-l-none border border-control-border-muted text-muted hover:text-accent hover:border-accent/50 transition-all"
-            title="Быстрый выбор атрибута"
-            aria-label="Меню цветов"
-          >
-            <ChevronDown
-              size={14}
-              strokeWidth={1.75}
-              className={`transition-transform ${colorMenuOpen ? 'rotate-180' : ''}`}
-            />
-          </button>
-          {colorMenuOpen && (
-            <div
-              className="absolute top-full right-0 mt-1 py-1 min-w-[200px] rounded-control border border-panel-border bg-panel shadow-floating z-50"
-              role="menu"
-            >
-              {COLOR_BY_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    updateSettings({ nodeColorBy: opt.value });
-                    setColorMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-control-hover-bg ${
-                    (settings.nodeColorBy ?? 'category') === opt.value ? 'text-accent bg-accent/10' : 'text-text'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-              <div className="my-1 border-t border-panel-border" />
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setModalOpen('colorMapping', true);
-                  setColorMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-control-hover-bg"
-              >
-                <Settings size={16} strokeWidth={1.75} />
-                Настройки цветов...
-              </button>
-            </div>
-          )}
-        </div>
         <button
           type="button"
           onClick={() => setModalOpen('settings', true)}

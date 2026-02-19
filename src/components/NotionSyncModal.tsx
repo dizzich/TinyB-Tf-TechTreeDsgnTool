@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, Download, Upload, CheckCircle, AlertCircle, Loader2, Unplug, Plug, RotateCcw } from 'lucide-react';
+import { X, RefreshCw, Download, Upload, CheckCircle, AlertCircle, Loader2, Unplug, Plug, RotateCcw, Pause } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { NotionConfig, NotionColumnMapping } from '../types';
 import { testNotionConnection, pullFromNotion, pullFromNotionIncremental, pushToNotion, bidirectionalSync, checkForNotionUpdates, NOTION_BUILTIN_PROXY } from '../utils/notionApi';
@@ -44,8 +44,8 @@ export const NotionSyncModal = () => {
   const edges = useStore((s) => s.edges);
   const replaceNodesAndEdgesForSync = useStore((s) => s.replaceNodesAndEdgesForSync);
   const settings = useStore((s) => s.settings);
-  const notionSourceOfTruth = useStore((s) => s.notionSourceOfTruth);
-  const setNotionSourceOfTruth = useStore((s) => s.setNotionSourceOfTruth);
+  const syncMode = useStore((s) => s.syncMode);
+  const setSyncMode = useStore((s) => s.setSyncMode);
   const setNotionDirty = useStore((s) => s.setNotionDirty);
   const setNotionHasRemoteUpdates = useStore((s) => s.setNotionHasRemoteUpdates);
   const notionHasRemoteUpdates = useStore((s) => s.notionHasRemoteUpdates);
@@ -53,6 +53,7 @@ export const NotionSyncModal = () => {
   const syncProgress = useStore((s) => s.syncProgress);
   const clearDirtyNodes = useStore((s) => s.clearDirtyNodes);
   const dirtyNodeIds = useStore((s) => s.dirtyNodeIds);
+  const setAllowBackgroundSync = useStore((s) => s.setAllowBackgroundSync);
 
   const [step, setStep] = useState<Step>(notionConfig ? 'sync' : 'connect');
   const [apiKey, setApiKey] = useState(notionConfig?.apiKey || '');
@@ -128,7 +129,7 @@ export const NotionSyncModal = () => {
     setNotionConfig(config);
     setNotionCorsProxy(corsProxy);
     setNotionConnected(true);
-    setNotionSourceOfTruth(true); // Enable by default on first connect
+    setSyncMode('pause'); // User chooses mode explicitly
     setStep('sync');
   };
 
@@ -147,13 +148,17 @@ export const NotionSyncModal = () => {
 
   const handlePull = async () => {
     if (!notionConfig) return;
+    setAllowBackgroundSync(true);
     setSyncInProgress(true);
     setSyncLog([]);
     setSyncResult(null);
     setStep('result');
 
     try {
-      addLog('Подключение к Notion...');
+      addLog('--- Pull (инкрементальный) ---');
+      addLog(`Локально: ${nodes.length} узлов, ${edges.length} связей.`);
+      addLog(lastSyncTime ? `Последняя синхронизация: ${new Date(lastSyncTime).toLocaleString()}` : 'lastSyncTime нет — загрузка полного снимка.');
+      addLog('Запрос к Notion API...');
       const { nodes: pulledNodes, edges: pulledEdges, notionFieldColors } = await pullFromNotionIncremental(
         notionConfig,
         lastSyncTime,
@@ -161,7 +166,8 @@ export const NotionSyncModal = () => {
         edges,
         getEffectiveProxy()
       );
-      addLog(`Получено ${pulledNodes.length} узлов и ${pulledEdges.length} связей`);
+      const withPos = pulledNodes.filter(n => n.position.x !== 0 || n.position.y !== 0).length;
+      addLog(`Получено: ${pulledNodes.length} узлов, ${pulledEdges.length} связей (с позициями в Notion: ${withPos}).`);
 
       // Use stored positions from Notion if available, otherwise auto-layout
       const hasPositions = pulledNodes.some(n => n.position.x !== 0 || n.position.y !== 0);
@@ -169,14 +175,13 @@ export const NotionSyncModal = () => {
         ? { nodes: pulledNodes, edges: pulledEdges }
         : getLayoutedElements(pulledNodes, pulledEdges, settings.layoutDirection);
       replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges, notionFieldColors, false);
-      addLog(hasPositions ? 'Позиції завантажено з Notion' : 'Авто-розміщення...');
-
+      addLog(hasPositions ? 'Позиции взяты из Notion.' : 'Позиций в Notion нет — применено авто-размещение.');
+      addLog('Граф обновлён. lastSyncTime сохранён.');
+      addLog('Pull завершён успешно.');
       const result = { added: pulledNodes.length, updated: 0, deleted: 0, conflicts: [], errors: [] };
       setSyncResult(result);
-      setLastSyncResult(result);
       setLastSyncTime(new Date().toISOString());
       setNotionHasRemoteUpdates(false);
-      addLog('Pull завершён успешно');
     } catch (err: unknown) {
       const msg = formatNotionError(err);
       addLog(`Ошибка: ${msg}`);
@@ -187,6 +192,7 @@ export const NotionSyncModal = () => {
 
   const handlePush = async () => {
     if (!notionConfig) return;
+    setAllowBackgroundSync(true);
     const dirty = dirtyNodeIds;
     const totalToPush = dirty.size > 0 ? dirty.size : nodes.length;
     setSyncInProgress(true);
@@ -196,7 +202,20 @@ export const NotionSyncModal = () => {
     setStep('result');
 
     try {
-      addLog(dirty.size > 0 ? `Отправка ${dirty.size} изменённых узлов...` : `Отправка ${nodes.length} узлов в Notion...`);
+      addLog('--- Push ---');
+      addLog(`Локально: ${nodes.length} узлов, ${edges.length} связей.`);
+      if (dirty.size > 0) {
+        addLog(`Режим: отправка ${dirty.size} изменённых узлов (dirty).`);
+        const toPush = nodes.filter((n) => dirty.has(n.id));
+        toPush.forEach((n, i) => {
+          const label = n.data?.label || n.id;
+          const kind = n.data?.notionPageId ? 'обновление' : 'создание';
+          addLog(`  ${i + 1}. ${label} — ${kind}`);
+        });
+      } else {
+        addLog(`Режим: полная отправка всех ${nodes.length} узлов.`);
+      }
+      addLog('Отправка в Notion...');
       const result = await pushToNotion(
         nodes,
         edges,
@@ -205,9 +224,10 @@ export const NotionSyncModal = () => {
         (current, total) => setSyncProgress({ current, total }),
         dirty.size > 0 ? dirty : undefined
       );
-      addLog(`Создано: ${result.added}, Обновлено: ${result.updated}`);
+      addLog(`Результат: создано ${result.added}, обновлено ${result.updated}.`);
       if (result.errors.length > 0) {
-        result.errors.forEach((e) => addLog(`Ошибка: ${e}`));
+        addLog('Ошибки:');
+        result.errors.forEach((e) => addLog(`  • ${e}`));
       }
       setSyncResult(result);
       setLastSyncResult(result);
@@ -216,7 +236,7 @@ export const NotionSyncModal = () => {
       setNotionDirty(false);
       setNotionHasRemoteUpdates(false);
       clearDirtyNodes();
-      addLog('Push завершён');
+      addLog('Push завершён.');
     } catch (err: unknown) {
       const msg = formatNotionError(err);
       addLog(`Ошибка: ${msg}`);
@@ -231,13 +251,54 @@ export const NotionSyncModal = () => {
     setCheckingUpdates(true);
     setSyncLog([]);
     try {
-      const { hasUpdates } = await checkForNotionUpdates(
+      addLog('--- Проверка отличий ---');
+      addLog('Шаг 1: проверка по времени последнего изменения в Notion...');
+      const { hasUpdates, lastEditedTime } = await checkForNotionUpdates(
         notionConfig,
         lastSyncTime,
         getEffectiveProxy()
       );
-      setNotionHasRemoteUpdates(hasUpdates);
-      addLog(hasUpdates ? 'В Notion есть изменения. Нажмите Pull для загрузки.' : 'Notion синхронизирован.');
+      addLog(lastSyncTime ? `lastSyncTime: ${new Date(lastSyncTime).toLocaleString()}` : 'lastSyncTime не задан.');
+      addLog(hasUpdates ? `В Notion есть правки после lastSyncTime.` : 'По времени изменений отличий нет.');
+      let hasRealDiffs = hasUpdates;
+      if (nodes.length > 0) {
+        addLog('Шаг 2: загрузка текущего состояния из Notion для сравнения...');
+        const { nodes: remoteNodes } = await pullFromNotion(notionConfig, getEffectiveProxy());
+        addLog(`Загружено из Notion: ${remoteNodes.length} узлов. Локально: ${nodes.length} узлов.`);
+        const remoteByPageId = new Map(remoteNodes.map((n) => [n.data.notionPageId!, n]));
+        let positionDiffs = 0;
+        let dataDiffs = 0;
+        const diffLabels: string[] = [];
+        let compared = 0;
+        for (const local of nodes) {
+          const pageId = local.data.notionPageId;
+          if (!pageId) continue;
+          const remote = remoteByPageId.get(pageId);
+          if (!remote) continue;
+          compared++;
+          const posSame =
+            Math.round(local.position.x) === Math.round(remote.position.x) &&
+            Math.round(local.position.y) === Math.round(remote.position.y);
+          if (!posSame) {
+            positionDiffs++;
+            if (diffLabels.length < 8) diffLabels.push(`${local.data.label || local.id} (локально ${Math.round(local.position.x)},${Math.round(local.position.y)} → Notion ${Math.round(remote.position.x)},${Math.round(remote.position.y)})`);
+          }
+          const localTime = Math.max(
+            new Date(local.data.updatedAt || 0).getTime(),
+            new Date(local.data.localModifiedAt || 0).getTime()
+          );
+          const remoteTime = new Date(remote.data.updatedAt || 0).getTime();
+          if (Math.abs(localTime - remoteTime) > 1000) dataDiffs++;
+        }
+        addLog(`Сравнено пар (локальный notionPageId есть в Notion): ${compared}.`);
+        if (positionDiffs > 0 || dataDiffs > 0) {
+          hasRealDiffs = true;
+          addLog(`Отличия: ${positionDiffs} узлов с другими позициями, ${dataDiffs} узлов с расхождением по времени.`);
+          if (diffLabels.length > 0) addLog('Примеры позиций: ' + diffLabels.join('; '));
+        } else addLog('Отличий по позициям и времени не найдено.');
+      }
+      setNotionHasRemoteUpdates(hasRealDiffs);
+      addLog(hasRealDiffs ? 'Итог: есть отличия. Выберите Pull, Push или Двустороннюю синхронизацию.' : 'Итог: локальные данные и Notion совпадают.');
     } catch (err: unknown) {
       const msg = formatNotionError(err);
       addLog(`Ошибка: ${msg}`);
@@ -247,13 +308,16 @@ export const NotionSyncModal = () => {
 
   const handleBidirectional = async () => {
     if (!notionConfig) return;
+    setAllowBackgroundSync(true);
     setSyncInProgress(true);
     setSyncLog([]);
     setSyncResult(null);
     setStep('result');
 
     try {
-      addLog('Двусторонняя синхронизация...');
+      addLog('--- Двусторонняя синхронизация ---');
+      addLog(`Локально: ${nodes.length} узлов, ${edges.length} связей. lastSyncTime: ${lastSyncTime ? new Date(lastSyncTime).toLocaleString() : 'нет'}.`);
+      addLog('Загрузка изменений из Notion и мерж (новее по времени побеждает)...');
       const { mergedNodes, mergedEdges, result, notionFieldColors } = await bidirectionalSync(
         nodes,
         edges,
@@ -261,21 +325,21 @@ export const NotionSyncModal = () => {
         getEffectiveProxy(),
         lastSyncTime
       );
-      addLog(`Добавлено: ${result.added}, Обновлено: ${result.updated}`);
+      addLog(`Мерж: добавлено из Notion ${result.added} узлов, обновлено данными из Notion ${result.updated} узлов (остальные — локальная версия).`);
+      addLog(`Итого после мержа: ${mergedNodes.length} узлов, ${mergedEdges.length} связей.`);
 
-      // Auto-layout new nodes
-      const { nodes: layouted, edges: layoutedEdges } = getLayoutedElements(
-        mergedNodes,
-        mergedEdges,
-        settings.layoutDirection
-      );
-      replaceNodesAndEdgesForSync(layouted, layoutedEdges, notionFieldColors, false);
-
+      // Preserve existing positions; only run full layout when none are set (same as Pull)
+      const hasPositions = mergedNodes.some(n => n.position.x !== 0 || n.position.y !== 0);
+      const toSet = hasPositions
+        ? { nodes: mergedNodes, edges: mergedEdges }
+        : getLayoutedElements(mergedNodes, mergedEdges, settings.layoutDirection);
+      replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges, notionFieldColors, false);
+      addLog(hasPositions ? 'Позиции узлов сохранены (без перерасчёта).' : 'Позиций не было — применено авто-размещение.');
       setSyncResult(result);
       setLastSyncResult(result);
       setLastSyncTime(new Date().toISOString());
       setNotionHasRemoteUpdates(false);
-      addLog('Синхронизация завершена');
+      addLog('Двусторонняя синхронизация завершена.');
     } catch (err: unknown) {
       const msg = formatNotionError(err);
       addLog(`Ошибка: ${msg}`);
@@ -284,64 +348,31 @@ export const NotionSyncModal = () => {
     setSyncInProgress(false);
   };
 
-  const handleFullResync = async () => {
+  const handleFullResetFromNotion = async () => {
     if (!notionConfig) return;
+    setAllowBackgroundSync(true);
     setSyncInProgress(true);
     setSyncLog([]);
     setSyncResult(null);
     setStep('result');
 
     try {
-      addLog('Полная пересинхронизация: загрузка всей базы...');
+      addLog('--- Сброс из Notion (перезаписать всё) ---');
+      addLog('Загрузка всей базы из Notion. Локальные изменения будут перезаписаны.');
       const { nodes: remoteNodes, edges: remoteEdges, notionFieldColors } = await pullFromNotion(
         notionConfig,
         getEffectiveProxy()
       );
-      addLog(`Получено ${remoteNodes.length} узлов из Notion`);
+      addLog(`Получено из Notion: ${remoteNodes.length} узлов, ${remoteEdges.length} связей.`);
 
-      // Merge: keep local dirty nodes that are newer than remote
-      const dirty = dirtyNodeIds;
-      const localDirtyMap = new Map<string, typeof nodes[0]>();
-      if (dirty.size > 0) {
-        for (const node of nodes) {
-          if (dirty.has(node.id)) localDirtyMap.set(node.data.notionPageId || node.id, node);
-        }
-      }
-
-      const mergedNodes = remoteNodes.map((remote) => {
-        const localDirty = localDirtyMap.get(remote.data.notionPageId || remote.id);
-        if (localDirty) {
-          const localTime = new Date(localDirty.data.localModifiedAt || 0).getTime();
-          const remoteTime = new Date(remote.data.updatedAt || 0).getTime();
-          if (localTime > remoteTime) {
-            addLog(`Локальные изменения новее для "${localDirty.data.label}" — оставляем`);
-            return { ...localDirty, data: { ...localDirty.data, notionPageId: remote.data.notionPageId } };
-          }
-        }
-        return remote;
-      });
-
-      const hasPositions = mergedNodes.some(n => n.position.x !== 0 || n.position.y !== 0);
+      const hasPositions = remoteNodes.some(n => n.position.x !== 0 || n.position.y !== 0);
       const toSet = hasPositions
-        ? { nodes: mergedNodes, edges: remoteEdges }
-        : getLayoutedElements(mergedNodes, remoteEdges, settings.layoutDirection);
+        ? { nodes: remoteNodes, edges: remoteEdges }
+        : getLayoutedElements(remoteNodes, remoteEdges, settings.layoutDirection);
       replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges, notionFieldColors, true);
+      addLog(hasPositions ? 'Позиции из Notion применены.' : 'Применено авто-размещение.');
 
-      // Push remaining locally-newer dirty nodes
-      const remainingDirty = new Set<string>();
-      localDirtyMap.forEach((localNode, key) => {
-        const merged = mergedNodes.find(n => (n.data.notionPageId || n.id) === key);
-        if (merged && merged.data.localModifiedAt === localNode.data.localModifiedAt) {
-          remainingDirty.add(merged.id);
-        }
-      });
-
-      if (remainingDirty.size > 0) {
-        addLog(`Отправка ${remainingDirty.size} локально-изменённых узлов...`);
-        await pushToNotion(toSet.nodes, toSet.edges, notionConfig, getEffectiveProxy(), undefined, remainingDirty);
-      }
-
-      const result = { added: remoteNodes.length, updated: remainingDirty.size, deleted: 0, conflicts: [], errors: [] };
+      const result = { added: remoteNodes.length, updated: 0, deleted: 0, conflicts: [], errors: [] };
       setSyncResult(result);
       setLastSyncResult(result);
       setLastSyncTime(new Date().toISOString());
@@ -349,7 +380,7 @@ export const NotionSyncModal = () => {
       setNotionDirty(false);
       setNotionHasRemoteUpdates(false);
       clearDirtyNodes();
-      addLog('Полная пересинхронизация завершена');
+      addLog('Сброс из Notion завершён.');
     } catch (err: unknown) {
       const msg = formatNotionError(err);
       addLog(`Ошибка: ${msg}`);
@@ -554,25 +585,26 @@ export const NotionSyncModal = () => {
                   type="button"
                   onClick={handleCheckUpdates}
                   disabled={syncInProgress || checkingUpdates}
-                  className="ml-auto text-xs px-2.5 py-1 rounded-control border border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text disabled:opacity-50"
+                  className="text-xs px-2.5 py-1 rounded-control border border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text disabled:opacity-50"
                 >
                   {checkingUpdates ? 'Проверка...' : 'Проверить'}
                 </button>
               </div>
-
-              <div className="grid grid-cols-1 gap-3">
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-text">Разовые действия</h4>
+                <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
                   onClick={handlePull}
                   disabled={syncInProgress}
-                  className={`flex items-center p-4 border-2 rounded-control bg-control-bg-muted hover:bg-control-hover-bg transition disabled:opacity-50 text-left ${
+                  className={`flex items-center p-3 border-2 rounded-control bg-control-bg-muted hover:bg-control-hover-bg transition disabled:opacity-50 text-left ${
                     notionHasRemoteUpdates ? 'border-amber-500/60' : 'border-control-border'
                   }`}
                 >
-                  <Download size={24} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
+                  <Download size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
                   <div>
-                    <div className="font-medium text-text">Pull изменений (инкрементальный)</div>
-                    <div className="text-xs text-muted">Загрузить только изменения из Notion с последней синхронизации.</div>
+                    <div className="font-medium text-text text-sm">Notion → Граф</div>
+                    <div className="text-xs text-muted">Загрузить изменения из Notion.</div>
                   </div>
                 </button>
 
@@ -580,16 +612,14 @@ export const NotionSyncModal = () => {
                   type="button"
                   onClick={handlePush}
                   disabled={syncInProgress || nodes.length === 0}
-                  className={`flex items-center p-4 border-2 rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left ${
+                  className={`flex items-center p-3 border-2 rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left ${
                     dirtyNodeIds.size > 0 ? 'border-amber-500/60' : 'border-control-border'
                   }`}
                 >
-                  <Upload size={24} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
+                  <Upload size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
                   <div>
-                    <div className="font-medium text-text">
-                      Push {dirtyNodeIds.size > 0 ? `(${dirtyNodeIds.size} изм.)` : '(нет изменений)'}
-                    </div>
-                    <div className="text-xs text-muted">Отправить изменённые узлы в Notion. Если нет dirty — полный Push.</div>
+                    <div className="font-medium text-text text-sm">Граф → Notion</div>
+                    <div className="text-xs text-muted">Отправить изменения в Notion.</div>
                   </div>
                 </button>
 
@@ -597,42 +627,75 @@ export const NotionSyncModal = () => {
                   type="button"
                   onClick={handleBidirectional}
                   disabled={syncInProgress}
-                  className="flex items-center p-4 border-2 border-control-border rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left"
+                  className="flex items-center p-3 border-2 border-control-border rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left"
                 >
-                  <RefreshCw size={24} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
+                  <RefreshCw size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
                   <div>
-                    <div className="font-medium text-text">Bidirectional (Двусторонняя)</div>
-                    <div className="text-xs text-muted">Объединить данные: более новая версия побеждает. Новые записи добавляются с обеих сторон.</div>
+                    <div className="font-medium text-text text-sm">Двусторонне (новее побеждает)</div>
+                    <div className="text-xs text-muted">Объединить: в каждой стороне берётся новее.</div>
                   </div>
                 </button>
 
                 <button
                   type="button"
-                  onClick={handleFullResync}
+                  onClick={handleFullResetFromNotion}
                   disabled={syncInProgress}
-                  className="flex items-center p-4 border-2 border-danger/30 rounded-control bg-control-bg-muted hover:border-danger/60 hover:bg-danger/5 transition disabled:opacity-50 text-left"
+                  className="flex items-center p-3 border-2 border-danger/30 rounded-control bg-control-bg-muted hover:border-danger/60 hover:bg-danger/5 transition disabled:opacity-50 text-left"
                 >
-                  <RotateCcw size={24} className="text-danger mr-3 flex-shrink-0" strokeWidth={1.75} />
+                  <RotateCcw size={20} className="text-danger mr-3 flex-shrink-0" strokeWidth={1.75} />
                   <div>
-                    <div className="font-medium text-text">Полная пересинхронизация</div>
-                    <div className="text-xs text-muted">Загрузить всю базу из Notion заново. Локально-новые изменения сохранятся.</div>
+                    <div className="font-medium text-text text-sm">Сброс из Notion</div>
+                    <div className="text-xs text-muted">Скачать всё из Notion, перезаписать граф (локальные изменения теряются).</div>
                   </div>
                 </button>
+                </div>
               </div>
 
-              <div className="p-3 bg-panel-2 border border-panel-border rounded-control">
-                <label className="flex items-center gap-2 text-sm font-medium text-text cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={notionSourceOfTruth}
-                    onChange={(e) => setNotionSourceOfTruth(e.target.checked)}
-                    className="w-4 h-4 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
-                  />
-                  Notion як джерело правди (автозбереження)
-                </label>
-                <p className="text-xs text-muted mt-1">
-                  Зміни автоматично зберігатимуться в Notion, включаючи позиції нод.
-                </p>
+              <div className="space-y-3 pt-2 border-t border-panel-border">
+                <h4 className="text-sm font-medium text-text">Режим фоновой синхронизации</h4>
+                <p className="text-xs text-muted">Работает в реальном времени при подключении.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSyncMode('push')}
+                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${
+                      syncMode === 'push' ? 'border-accent bg-accent/15 text-accent' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
+                    }`}
+                  >
+                    <Upload size={16} strokeWidth={1.75} />
+                    <span className="text-sm">Граф → Notion</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSyncMode('pull')}
+                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${
+                      syncMode === 'pull' ? 'border-accent bg-accent/15 text-accent' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
+                    }`}
+                  >
+                    <Download size={16} strokeWidth={1.75} />
+                    <span className="text-sm">Notion → Граф</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSyncMode('bidirectional')}
+                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${
+                      syncMode === 'bidirectional' ? 'border-accent bg-accent/15 text-accent' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
+                    }`}
+                  >
+                    <RefreshCw size={16} strokeWidth={1.75} />
+                    <span className="text-sm">Двусторонне</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSyncMode('pause')}
+                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${
+                      syncMode === 'pause' ? 'border-amber-500/50 bg-amber-500/15 text-amber-400' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
+                    }`}
+                  >
+                    <Pause size={16} strokeWidth={1.75} />
+                    <span className="text-sm">Пауза</span>
+                  </button>
+                </div>
               </div>
 
               <div className="pt-2 border-t border-panel-border flex items-center justify-between">
@@ -668,9 +731,9 @@ export const NotionSyncModal = () => {
                 </div>
               )}
 
-              <div className="bg-control-bg border border-control-border rounded-control p-3 text-xs font-mono text-text max-h-48 overflow-y-auto">
+              <div className="bg-control-bg border border-control-border rounded-control p-3 text-xs font-mono text-text max-h-80 overflow-y-auto overflow-x-hidden overscroll-y-auto" title="Лог синхронизации — прокрутите при необходимости">
                 {syncLog.map((line, i) => (
-                  <div key={i}>{line}</div>
+                  <div key={i} className="break-words">{line}</div>
                 ))}
                 {syncLog.length === 0 && <div className="text-muted">Ожидание...</div>}
               </div>

@@ -28,7 +28,8 @@ export const StartupModal = () => {
   const notionConfig = useStore((state) => state.notionConfig);
   const replaceNodesAndEdgesForSync = useStore((state) => state.replaceNodesAndEdgesForSync);
   const setNotionConnected = useStore((state) => state.setNotionConnected);
-  const setNotionSourceOfTruth = useStore((state) => state.setNotionSourceOfTruth);
+  const setSyncMode = useStore((state) => state.setSyncMode);
+  const setAllowBackgroundSync = useStore((state) => state.setAllowBackgroundSync);
   const setLastSyncTime = useStore((state) => state.setLastSyncTime);
   const settings = useStore((state) => state.settings);
   const setModalOpen = useStore((state) => state.setModalOpen);
@@ -107,7 +108,8 @@ export const StartupModal = () => {
         replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges, notionFieldColors, replaceColors);
 
         setNotionConnected(true);
-        setNotionSourceOfTruth(true);
+        setSyncMode('bidirectional');
+        setAllowBackgroundSync(true);
         setLastSyncTime(new Date().toISOString());
         setIsVisible(false);
       } catch (err) {

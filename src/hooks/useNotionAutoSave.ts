@@ -20,7 +20,8 @@ export const useNotionAutoSave = () => {
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
   const notionConfig = useStore((s) => s.notionConfig);
-  const notionSourceOfTruth = useStore((s) => s.notionSourceOfTruth);
+  const syncMode = useStore((s) => s.syncMode);
+  const allowBackgroundSync = useStore((s) => s.allowBackgroundSync);
   const notionCorsProxy = useStore((s) => s.notionCorsProxy);
   const syncInProgress = useStore((s) => s.syncInProgress);
   const setSyncInProgress = useStore((s) => s.setSyncInProgress);
@@ -40,7 +41,7 @@ export const useNotionAutoSave = () => {
   const initialLoadRef = useRef(true);
 
   useEffect(() => {
-    if (!notionSourceOfTruth || !notionConfig || syncInProgress) return;
+    if (!allowBackgroundSync || !notionConfig || syncInProgress || syncMode === 'pause' || (syncMode !== 'push' && syncMode !== 'bidirectional')) return;
 
     if (syncJustCompleted) {
       setSyncJustCompleted(false);
@@ -105,7 +106,7 @@ export const useNotionAutoSave = () => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [nodes, edges, notionSourceOfTruth, notionConfig, syncInProgress, notionCorsProxy, dirtyNodeIds, syncJustCompleted, setSyncJustCompleted, setSyncInProgress, setSyncProgress, setLastSyncTime, setLastSyncError, setNotionDirty, clearDirtyNodes]);
+  }, [nodes, edges, allowBackgroundSync, syncMode, notionConfig, syncInProgress, notionCorsProxy, dirtyNodeIds, syncJustCompleted, setSyncJustCompleted, setSyncInProgress, setSyncProgress, setLastSyncTime, setLastSyncError, setNotionDirty, clearDirtyNodes]);
 
   // Auto-pull incoming changes when safe: notionSourceOfTruth enabled, remote updates flagged, no local dirty nodes
   const notionHasRemoteUpdates = useStore((s) => s.notionHasRemoteUpdates);
@@ -115,10 +116,12 @@ export const useNotionAutoSave = () => {
 
   useEffect(() => {
     if (
-      !notionSourceOfTruth ||
+      !allowBackgroundSync ||
       !notionConfig ||
       !notionHasRemoteUpdates ||
       syncInProgress ||
+      syncMode === 'pause' ||
+      (syncMode !== 'pull' && syncMode !== 'bidirectional') ||
       dirtyNodeIds.size > 0
     )
       return;
@@ -154,5 +157,5 @@ export const useNotionAutoSave = () => {
     })();
 
     return () => { cancelled = true; };
-  }, [notionHasRemoteUpdates, notionSourceOfTruth, notionConfig, syncInProgress, dirtyNodeIds, notionCorsProxy, setSyncInProgress, setLastSyncTime, setLastSyncError, setNotionHasRemoteUpdates, replaceNodesAndEdgesForSync, settings]);
+  }, [notionHasRemoteUpdates, allowBackgroundSync, syncMode, notionConfig, syncInProgress, dirtyNodeIds, notionCorsProxy, setSyncInProgress, setLastSyncTime, setLastSyncError, setNotionHasRemoteUpdates, replaceNodesAndEdgesForSync, settings]);
 };

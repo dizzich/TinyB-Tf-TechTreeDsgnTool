@@ -20,16 +20,18 @@ export const useNotionPolling = () => {
   const { doPull } = useNotionSyncActions();
   const notionConfig = useStore((s) => s.notionConfig);
   const notionConnected = useStore((s) => s.notionConnected);
+  const allowBackgroundSync = useStore((s) => s.allowBackgroundSync);
+  const syncMode = useStore((s) => s.syncMode);
   const notionCorsProxy = useStore((s) => s.notionCorsProxy);
   const doPullRef = useRef(doPull);
   doPullRef.current = doPull;
 
   useEffect(() => {
-    if (!notionConfig || !notionConnected) return;
+    if (!notionConfig || !notionConnected || !allowBackgroundSync || syncMode === 'pause' || (syncMode !== 'pull' && syncMode !== 'bidirectional')) return;
 
     const runCheck = async () => {
       const state = useStore.getState();
-      if (state.syncInProgress) return;
+      if (state.syncInProgress || !state.allowBackgroundSync || state.syncMode === 'pause' || (state.syncMode !== 'pull' && state.syncMode !== 'bidirectional')) return;
       try {
         const proxy = getEffectiveProxy(state.notionCorsProxy);
         const { hasUpdates } = await checkForNotionUpdates(
@@ -40,7 +42,7 @@ export const useNotionPolling = () => {
         if (hasUpdates) {
           useStore.getState().setNotionHasRemoteUpdates(true);
           const current = useStore.getState();
-          if (current.notionSourceOfTruth && current.dirtyNodeIds.size === 0) {
+          if ((current.syncMode === 'pull' || current.syncMode === 'bidirectional') && current.dirtyNodeIds.size === 0) {
             doPullRef.current();
           }
         }
@@ -51,5 +53,5 @@ export const useNotionPolling = () => {
 
     const intervalId = setInterval(runCheck, POLL_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [notionConfig, notionConnected, notionCorsProxy]);
+  }, [notionConfig, notionConnected, allowBackgroundSync, syncMode, notionCorsProxy]);
 };
