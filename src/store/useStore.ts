@@ -10,7 +10,7 @@ import {
   OnEdgesChange,
   OnConnect,
 } from '@xyflow/react';
-import { TechNode, TechEdge, ProjectMeta, ProjectSettings, NotionConfig, SyncResult, DEFAULT_NODE_COLOR_PALETTE, CanvasFilter } from '../types';
+import { TechNode, TechEdge, ProjectMeta, ProjectSettings, NotionConfig, SyncResult, DEFAULT_NODE_COLOR_PALETTE, CanvasFilter, EdgeWaypoint } from '../types';
 
 const HISTORY_LIMIT = 50;
 
@@ -120,6 +120,11 @@ interface AppState {
   markNodesDirty: (ids: string[]) => void;
   clearDirtyNodes: () => void;
   setSyncJustCompleted: (value: boolean) => void;
+
+  /** Update all waypoints for an edge. skipSnapshot=true during drag to avoid spamming history. */
+  updateEdgeWaypoints: (edgeId: string, waypoints: EdgeWaypoint[], skipSnapshot?: boolean) => void;
+  addEdgeWaypoint: (edgeId: string, segmentIndex: number, point: EdgeWaypoint) => void;
+  removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
 
   setCanvasFilter: (filter: Partial<CanvasFilter>) => void;
   setConnectedSubgraphHighlight: (ids: { nodeIds: Set<string>; edgeIds: Set<string> } | null) => void;
@@ -491,6 +496,63 @@ export const useStore = create<AppState>()((set, get) => ({
       },
       clearDirtyNodes: () => set({ dirtyNodeIds: new Set<string>() }),
       setSyncJustCompleted: (value) => set({ syncJustCompleted: value }),
+
+      updateEdgeWaypoints: (edgeId, waypoints, skipSnapshot = false) => {
+        if (!skipSnapshot) get()._pushSnapshot();
+        const edge = get().edges.find((e) => e.id === edgeId);
+        const wp = waypoints.length > 0 ? [...waypoints] : undefined;
+        const newEdges = get().edges.map((e) =>
+          e.id === edgeId ? { ...e, waypoints: wp } : e
+        );
+        set({ edges: newEdges });
+        if (!skipSnapshot && edge) {
+          const ts = nowIso();
+          const ids = new Set<string>([edge.source, edge.target]);
+          const next = new Set(get().dirtyNodeIds);
+          ids.forEach((id) => next.add(id));
+          const newNodes = get().nodes.map((n) =>
+            ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+          );
+          set({ nodes: newNodes, dirtyNodeIds: next });
+        }
+      },
+
+      addEdgeWaypoint: (edgeId, segmentIndex, point) => {
+        get()._pushSnapshot();
+        const edge = get().edges.find((e) => e.id === edgeId);
+        if (!edge) return;
+        const wp = [...(edge.waypoints ?? [])];
+        wp.splice(segmentIndex, 0, point);
+        const newEdges = get().edges.map((e) =>
+          e.id === edgeId ? { ...e, waypoints: wp } : e
+        );
+        const ts = nowIso();
+        const ids = new Set<string>([edge.source, edge.target]);
+        const next = new Set(get().dirtyNodeIds);
+        ids.forEach((id) => next.add(id));
+        const newNodes = get().nodes.map((n) =>
+          ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+        );
+        set({ edges: newEdges, nodes: newNodes, dirtyNodeIds: next });
+      },
+
+      removeEdgeWaypoint: (edgeId, waypointIndex) => {
+        get()._pushSnapshot();
+        const edge = get().edges.find((e) => e.id === edgeId);
+        if (!edge?.waypoints) return;
+        const wp = edge.waypoints.filter((_, i) => i !== waypointIndex);
+        const newEdges = get().edges.map((e) =>
+          e.id === edgeId ? { ...e, waypoints: wp.length > 0 ? wp : undefined } : e
+        );
+        const ts = nowIso();
+        const ids = new Set<string>([edge.source, edge.target]);
+        const next = new Set(get().dirtyNodeIds);
+        ids.forEach((id) => next.add(id));
+        const newNodes = get().nodes.map((n) =>
+          ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+        );
+        set({ edges: newEdges, nodes: newNodes, dirtyNodeIds: next });
+      },
 
       setCanvasFilter: (filter) => {
         const current = get().canvasFilter;

@@ -26,6 +26,7 @@ import {
   AlignCenterVertical,
   ArrowLeftRight,
   ArrowUpDown,
+  PenTool,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { getLayoutedElements, layoutSubgraph } from '../utils/autoLayout';
@@ -408,11 +409,17 @@ export const Toolbar = () => {
           <button
             type="button"
             onClick={() => setEdgeMenuOpen((o) => !o)}
-            className={`${iconBtnClass} w-auto px-2 flex items-center gap-1.5`}
-            title="Тип соединений"
+            className={`${iconBtnClass} w-auto px-2 flex items-center gap-1.5 ${
+              settings.manualEdgeMode ? 'text-accent border-accent/50 shadow-[0_0_5px_rgba(106,162,255,0.2)]' : ''
+            }`}
+            title={settings.manualEdgeMode ? 'Ручные линии (вейпоинты)' : 'Тип соединений'}
             aria-label="Тип соединений"
           >
-            <currentEdgeOption.icon size={18} strokeWidth={1.75} />
+            {settings.manualEdgeMode ? (
+              <PenTool size={18} strokeWidth={1.75} />
+            ) : (
+              <currentEdgeOption.icon size={18} strokeWidth={1.75} />
+            )}
             <ChevronDown
               size={12}
               strokeWidth={1.75}
@@ -466,6 +473,22 @@ export const Toolbar = () => {
                   />
                   Анимация (бегущие точки)
                 </label>
+              </div>
+              <div className="my-1 border-t border-panel-border" />
+              <div className="px-3 py-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-text hover:text-accent transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={settings.manualEdgeMode ?? false}
+                    onChange={(e) => updateSettings({ manualEdgeMode: e.target.checked })}
+                    className="w-3.5 h-3.5 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
+                  />
+                  <PenTool size={14} strokeWidth={1.75} />
+                  Ручные линии (вейпоинты)
+                </label>
+                <p className="text-[10px] text-muted mt-1 leading-tight">
+                  Кликайте на линию, чтобы добавить точки изгиба. Перетаскивайте для настройки. Двойной клик — удалить точку.
+                </p>
               </div>
             </div>
           )}

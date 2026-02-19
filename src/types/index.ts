@@ -96,6 +96,13 @@ export interface TechNode {
   selected?: boolean;
 }
 
+export interface EdgeWaypoint {
+  x: number;
+  y: number;
+}
+
+export type EdgePathType = 'bezier' | 'straight' | 'orthogonal';
+
 export interface TechEdge {
   id: string;
   source: string;
@@ -103,6 +110,10 @@ export interface TechEdge {
   type?: string;
   animated?: boolean;
   label?: string;
+  /** Intermediate bend points between source and target (manual edge mode) */
+  waypoints?: EdgeWaypoint[];
+  /** Per-edge routing style used in manual edge mode */
+  pathType?: EdgePathType;
 }
 
 // --- Notion API / Sync types ---
@@ -147,6 +158,8 @@ export interface NotionColumnMapping {
   editorPosition: string;
   /** Notion property (relation) → OpenCondition; push uses relation, pull can also read rich_text/rollup */
   openCondition?: string;
+  /** Notion property (rich_text) → Edge line data as JSON (waypoints, pathType per outgoing edge) */
+  lineData?: string;
 }
 
 export type SyncDirection = 'pull' | 'push' | 'bidirectional';
@@ -227,6 +240,8 @@ export interface ProjectSettings {
   nodeTextFit?: boolean;
   /** Node visual preset: default, bold, outline, minimal, striped */
   nodeVisualPreset?: NodeVisualPreset;
+  /** When true, edges use manual waypoint-based routing instead of auto layout */
+  manualEdgeMode?: boolean;
 }
 
 /** Filter property — all node data fields usable for filtering */

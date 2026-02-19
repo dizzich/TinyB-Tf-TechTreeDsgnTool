@@ -411,3 +411,120 @@ select {
   opacity: 0.15;
   transition: opacity 0.3s ease;
 }
+
+/* ===== Manual Edge Mode: Editable Edge Waypoints ===== */
+
+.editable-edge-waypoint {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  box-shadow: 0 0 6px rgba(106, 162, 255, 0.5);
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  z-index: 10;
+}
+
+.editable-edge-waypoint:hover,
+.editable-edge-waypoint[data-hovered] {
+  transform: translate(-50%, -50%) scale(1.3);
+  box-shadow: 0 0 12px rgba(106, 162, 255, 0.7);
+}
+
+.editable-edge-waypoint[data-dragging] {
+  cursor: grabbing;
+  background: var(--accent-hover);
+  box-shadow: 0 0 14px rgba(106, 162, 255, 0.8);
+}
+
+/* Corner bend handles (orthogonal/smoothstep) — square to distinguish from waypoints */
+.editable-edge-bend {
+  border-radius: 3px;
+  width: 10px;
+  height: 10px;
+}
+
+.editable-edge-add-wp {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--control-bg-muted);
+  border: 1.5px solid var(--control-border);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  z-index: 9;
+}
+
+.react-flow__edge.selected .editable-edge-add-wp,
+.react-flow__edge:hover .editable-edge-add-wp {
+  opacity: 0.7;
+}
+
+.editable-edge-add-wp:hover {
+  opacity: 1 !important;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(106, 162, 255, 0.5);
+}
+
+/* Selected editable edge path glow */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent);
+  filter: drop-shadow(0 0 4px var(--accent));
+}
+
+/* Animated editable edge (manual mode) */
+.react-flow__edge .editable-edge-animated .react-flow__edge-path {
+  stroke-dasharray: 5;
+  animation: dashdraw 0.5s linear infinite;
+}
+
+/* Edge context menu */
+.edge-context-menu {
+  min-width: 160px;
+  padding: 4px 0;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  box-shadow: var(--shadow-floating);
+  display: flex;
+  flex-direction: column;
+}
+
+.edge-ctx-item {
+  width: 100%;
+  padding: 7px 14px;
+  font-size: 12px;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.edge-ctx-item:hover {
+  background: var(--control-hover-bg);
+  color: var(--accent);
+}
+
+.edge-ctx-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+  color: var(--muted);
+}
+
+.edge-ctx-item:disabled:hover {
+  background: none;
+  color: var(--muted);
+}

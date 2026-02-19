@@ -395,6 +395,41 @@ const parseEditorPosition = (posText: string): { x: number; y: number } | undefi
   return undefined;
 };
 
+/** Parse a LineData rich_text value into edge routing map, or empty map on failure */
+const parseLineData = (text: string): Record<string, { waypoints?: { x: number; y: number }[]; pathType?: string }> => {
+  if (!text) return {};
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed === 'object' && parsed !== null) return parsed;
+  } catch { /* ignore */ }
+  return {};
+};
+
+/** Apply LineData from pulled pages onto the edge array (mutates in-place for performance) */
+const applyLineDataToEdges = (
+  pages: any[],
+  config: NotionConfig,
+  edges: TechEdge[],
+  pageIdToNodeId: Map<string, string>
+): void => {
+  const cm = config.columnMapping;
+  if (!cm.lineData) return;
+  const edgeMap = new Map(edges.map((e) => [e.id, e]));
+  for (const page of pages) {
+    const prop = page.properties?.[cm.lineData];
+    if (!prop) continue;
+    const text = getPlainText(prop?.rich_text || []);
+    const lineData = parseLineData(text);
+    for (const [edgeId, data] of Object.entries(lineData)) {
+      const edge = edgeMap.get(edgeId);
+      if (edge) {
+        if (data.waypoints?.length) edge.waypoints = data.waypoints;
+        if (data.pathType) edge.pathType = data.pathType as TechEdge['pathType'];
+      }
+    }
+  }
+};
+
 /** Resolve openCondition from page props: rich_text, formula, relation (with id→title map), rollup (all values), select, status, title */
 function resolveOpenCondition(
   prop: any,
@@ -643,6 +678,8 @@ export const pullFromNotion = async (
     i === self.findIndex(t => t.source === edge.source && t.target === edge.target)
   );
 
+  applyLineDataToEdges(pages, config, uniqueEdges, pageIdToNodeId);
+
   return { nodes, edges: uniqueEdges, notionFieldColors };
 };
 
@@ -710,6 +747,7 @@ const pagesToNodesAndEdges = (
   const uniqueEdges = edges.filter((edge, i, self) =>
     i === self.findIndex((t) => t.source === edge.source && t.target === edge.target)
   );
+  applyLineDataToEdges(pages, config, uniqueEdges, pageIdToNodeId);
   const notionFieldColors = buildNotionFieldColors(pages, config);
   return { nodes, edges: uniqueEdges, notionFieldColors };
 };
@@ -906,6 +944,23 @@ const buildNotionProperties = (
           content: JSON.stringify({ x: Math.round(position.x), y: Math.round(position.y) })
         }
       }]
+    };
+  }
+
+  // LineData — serialize outgoing edge waypoints/pathType as JSON
+  if (cm.lineData) {
+    const lineDataObj: Record<string, { waypoints?: { x: number; y: number }[]; pathType?: string }> = {};
+    for (const edge of outgoingEdges) {
+      if (edge.waypoints?.length || edge.pathType) {
+        lineDataObj[edge.id] = {
+          ...(edge.waypoints?.length ? { waypoints: edge.waypoints } : {}),
+          ...(edge.pathType ? { pathType: edge.pathType } : {}),
+        };
+      }
+    }
+    const content = Object.keys(lineDataObj).length > 0 ? JSON.stringify(lineDataObj) : '';
+    props[cm.lineData] = {
+      rich_text: [{ text: { content } }],
     };
   }
 

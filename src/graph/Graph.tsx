@@ -4,6 +4,7 @@ import '@xyflow/react/dist/style.css';
 
 import { useStore } from '../store/useStore';
 import TechNode from './TechNode';
+import EditableEdge from './EditableEdge';
 import { nodeMatchesRules } from '../utils/filterUtils';
 import type { TechNode as TechNodeType, CanvasFilter } from '../types';
 
@@ -40,10 +41,13 @@ export const Graph = () => {
   const edgeType = useStore((state) => state.settings.edgeType) ?? 'default';
   const edgeStrokeWidth = useStore((state) => state.settings.edgeStrokeWidth) ?? 2;
   const edgeAnimated = useStore((state) => state.settings.edgeAnimated) ?? false;
+  const manualEdgeMode = useStore((state) => state.settings.manualEdgeMode) ?? false;
   const canvasFilter = useStore((state) => state.canvasFilter);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeTypes = useMemo(() => ({ techNode: TechNode as any }), []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const edgeTypes = useMemo(() => ({ editableEdge: EditableEdge as any }), []);
 
   // Apply canvas filter and/or edge-click highlight to nodes
   const { processedNodes, matchedNodeIds } = useMemo(() => {
@@ -87,9 +91,20 @@ export const Graph = () => {
   const processedEdges = useMemo(() => {
     let result = edges.map((e) => ({
       ...e,
-      type: edgeType,
+      type: manualEdgeMode ? 'editableEdge' : edgeType,
       style: { stroke: 'var(--edge-stroke)', strokeWidth: edgeStrokeWidth },
       animated: edgeAnimated,
+      ...(manualEdgeMode ? { selectable: true } : {}),
+      ...(manualEdgeMode
+        ? {
+            data: {
+              waypoints: e.waypoints ?? [],
+              edgeType,
+              edgeStrokeWidth,
+              edgeAnimated,
+            },
+          }
+        : {}),
     }));
 
     if (connectedSubgraphHighlight) {
@@ -114,15 +129,26 @@ export const Graph = () => {
     }
 
     return result;
-  }, [edges, edgeType, edgeStrokeWidth, edgeAnimated, processedNodes, matchedNodeIds, canvasFilter, connectedSubgraphHighlight]);
+  }, [edges, edgeType, edgeStrokeWidth, edgeAnimated, manualEdgeMode, processedNodes, matchedNodeIds, canvasFilter, connectedSubgraphHighlight]);
+
+  const setEdges = useStore((s) => s.setEdges);
 
   const handleEdgeClick = useCallback(
     (_: React.MouseEvent, edge: { id: string; source: string; target: string }) => {
+      if (manualEdgeMode) {
+        // Explicitly select this edge for waypoint editing
+        const next = edges.map((e) => ({
+          ...e,
+          selected: e.id === edge.id,
+        }));
+        setEdges(next);
+        return;
+      }
       const nodeIds = new Set<string>([edge.source, edge.target]);
       const edgeIds = new Set<string>([edge.id]);
       setConnectedSubgraphHighlight({ nodeIds, edgeIds });
     },
-    [setConnectedSubgraphHighlight]
+    [manualEdgeMode, setConnectedSubgraphHighlight, edges, setEdges]
   );
 
   const clearHighlight = useCallback(() => {
@@ -159,6 +185,7 @@ export const Graph = () => {
         edges={processedEdges}
         minZoom={0.05}
         maxZoom={2.5}
+        elementsSelectable={true}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -167,6 +194,7 @@ export const Graph = () => {
         onPaneClick={clearHighlight}
         onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         className="bg-workspace-bg"
         deleteKeyCode={null} // Disable default delete behavior, we handle it ourselves
