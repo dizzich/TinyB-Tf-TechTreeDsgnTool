@@ -242,6 +242,12 @@ export interface ProjectSettings {
   nodeVisualPreset?: NodeVisualPreset;
   /** When true, edges use manual waypoint-based routing instead of auto layout */
   manualEdgeMode?: boolean;
+  /** Master switch: when false, no snapping. Default true. */
+  snapEnabled?: boolean;
+  /** Snap-to-grid step (px). 0 = off. Default 8. */
+  snapGridSize?: number;
+  /** Snap to neighboring nodes (align edges/centers when close). Default false. */
+  snapToObjects?: boolean;
 }
 
 /** Filter property — all node data fields usable for filtering */

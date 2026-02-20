@@ -11,6 +11,7 @@ import {
   OnConnect,
 } from '@xyflow/react';
 import { TechNode, TechEdge, ProjectMeta, ProjectSettings, NotionConfig, SyncResult, DEFAULT_NODE_COLOR_PALETTE, CanvasFilter, EdgeWaypoint } from '../types';
+import { snapPositionToObjects, snapToGrid } from '../utils/snapToGrid';
 
 const HISTORY_LIMIT = 50;
 
@@ -59,6 +60,14 @@ interface AppState {
   /** Edge-click highlight: connected subgraph nodeIds and edgeIds, or null when off */
   connectedSubgraphHighlight: { nodeIds: Set<string>; edgeIds: Set<string> } | null;
 
+  /** Shift key held — enables axis-lock drag mode */
+  _shiftKeyPressed: boolean;
+  /** Per-node axis lock during drag (Shift + axis align) */
+  _dragAxisLock: Map<string, { lockX?: number; lockY?: number }>;
+  /** Drag start position for axis choice when both axes snap */
+  _nodeDragStartPos: { id: string; x: number; y: number } | null;
+  setShiftKeyPressed: (pressed: boolean) => void;
+
   // UI State
   ui: {
     sidebarOpen: boolean;
@@ -86,7 +95,7 @@ interface AppState {
   onNodesChange: OnNodesChange<TechNode>;
   onEdgesChange: OnEdgesChange<TechEdge>;
   onConnect: OnConnect;
-  onNodeDragStart: () => void;
+  onNodeDragStart: (event?: unknown, node?: { id: string; position: { x: number; y: number } }, nodes?: unknown) => void;
   setNodes: (nodes: TechNode[]) => void;
   setEdges: (edges: TechEdge[]) => void;
   /** Replace nodes/edges from sync (Pull). Optionally merge/replace notionFieldColors. */
@@ -152,6 +161,9 @@ const defaultSettings: ProjectSettings = {
   nodeTextAlignV: 'center',
   nodeTextFit: true,
   nodeVisualPreset: 'default',
+  snapEnabled: true,
+  snapGridSize: 8,
+  snapToObjects: false,
 };
 
 const defaultMeta: ProjectMeta = {
@@ -282,6 +294,17 @@ export const useStore = create<AppState>()((set, get) => ({
 
       connectedSubgraphHighlight: null,
 
+      _shiftKeyPressed: false,
+      _dragAxisLock: new Map<string, { lockX?: number; lockY?: number }>(),
+      _nodeDragStartPos: null,
+
+      setShiftKeyPressed: (pressed) => {
+        set({
+          _shiftKeyPressed: pressed,
+          ...(pressed ? {} : { _dragAxisLock: new Map() }),
+        });
+      },
+
       ui: {
         sidebarOpen: true,
         inspectorOpen: true,
@@ -296,26 +319,106 @@ export const useStore = create<AppState>()((set, get) => ({
         colorMapping: false,
       },
 
-      onNodeDragStart: () => {
+      onNodeDragStart: (_event, node) => {
         get()._pushSnapshot();
+        if (node?.id != null && node?.position != null)
+          set({ _nodeDragStartPos: { id: node.id, x: node.position.x, y: node.position.y } });
       },
 
       onNodesChange: (changes: NodeChange<TechNode>[]) => {
         if (_restoringHistory) return;
-        
+
+        const currentNodes = get().nodes;
+        const settings = get().settings;
+        const snapEnabled = settings.snapEnabled ?? true;
+        const snapToObjects = settings.snapToObjects ?? false;
+        const snapGridSize = settings.snapGridSize ?? 8;
+        const nodeMinWidth = settings.nodeMinWidth ?? 200;
+        const nodeMinHeight = settings.nodeMinHeight ?? 48;
+
+        const shiftPressed = get()._shiftKeyPressed;
+        const dragAxisLock = get()._dragAxisLock;
+
+        let processedChanges = changes;
+        if (snapEnabled) {
+          processedChanges = changes.map((c) => {
+            if (c.type !== 'position' || !c.id) return c;
+            const posChange = c as { type: 'position'; id: string; position?: { x: number; y: number }; dragging?: boolean };
+            const position = posChange.position;
+            if (!position) return c;
+
+            let x = position.x;
+            let y = position.y;
+            const isDragging = posChange.dragging === true;
+
+            if (shiftPressed && isDragging) {
+              const lock = dragAxisLock.get(posChange.id);
+              if (lock) {
+                x = lock.lockX ?? position.x;
+                y = lock.lockY ?? position.y;
+              } else {
+                const objSnap = snapPositionToObjects(position, posChange.id, currentNodes, {
+                  threshold: 40,
+                  defaultWidth: nodeMinWidth,
+                  defaultHeight: nodeMinHeight,
+                });
+                if (objSnap.snappedX || objSnap.snappedY) {
+                  const nextLock = new Map(dragAxisLock);
+                  if (objSnap.snappedX && objSnap.snappedY) {
+                    const start = get()._nodeDragStartPos;
+                    const preferVertical = start && start.id === posChange.id
+                      ? Math.abs(position.y - start.y) >= Math.abs(position.x - start.x)
+                      : objSnap.minDx <= objSnap.minDy;
+                    nextLock.set(posChange.id, preferVertical ? { lockX: objSnap.x } : { lockY: objSnap.y });
+                  } else if (objSnap.snappedX) {
+                    nextLock.set(posChange.id, { lockX: objSnap.x });
+                  } else {
+                    nextLock.set(posChange.id, { lockY: objSnap.y });
+                  }
+                  set({ _dragAxisLock: nextLock });
+                  x = objSnap.x;
+                  y = objSnap.y;
+                }
+              }
+            } else if (snapToObjects && !shiftPressed) {
+              const objSnap = snapPositionToObjects(position, posChange.id, currentNodes, {
+                threshold: 16,
+                defaultWidth: nodeMinWidth,
+                defaultHeight: nodeMinHeight,
+              });
+              x = objSnap.x;
+              y = objSnap.y;
+              if ((!objSnap.snappedX || !objSnap.snappedY) && snapGridSize > 0) {
+                const gridSnap = snapToGrid(x, y, snapGridSize);
+                if (!objSnap.snappedX) x = gridSnap.x;
+                if (!objSnap.snappedY) y = gridSnap.y;
+              }
+            } else if (snapGridSize > 0) {
+              const gridSnap = snapToGrid(x, y, snapGridSize);
+              x = gridSnap.x;
+              y = gridSnap.y;
+            }
+
+            if (x === position.x && y === position.y) return c;
+            return { ...c, position: { x, y } } as NodeChange<TechNode>;
+          });
+        }
+
         const dragEndIds: string[] = [];
         let hasDragEnd = false;
-        for (const c of changes) {
+        for (const c of processedChanges) {
           const posChange = c as { type: string; id?: string; dragging?: boolean };
           if (c.type === 'position' && c.id && posChange.dragging === false) {
             dragEndIds.push(c.id);
             hasDragEnd = true;
           }
         }
-        
-        const newNodes = applyNodeChanges(changes, get().nodes);
+        const newNodes = applyNodeChanges(processedChanges, currentNodes);
         if (hasDragEnd) {
-          // Snapshot is taken at drag start (onNodeDragStart). Here we just update metadata.
+          const nextLock = new Map(get()._dragAxisLock);
+          dragEndIds.forEach((id) => nextLock.delete(id));
+          const start = get()._nodeDragStartPos;
+          const clearStart = start != null && dragEndIds.includes(start.id);
           const ts = nowIso();
           const ids = new Set(dragEndIds);
           const nodesWithTs = newNodes.map((n) =>
@@ -323,7 +426,12 @@ export const useStore = create<AppState>()((set, get) => ({
           );
           const next = new Set(get().dirtyNodeIds);
           dragEndIds.forEach((id) => next.add(id));
-          set({ nodes: nodesWithTs, dirtyNodeIds: next });
+          set({
+            nodes: nodesWithTs,
+            dirtyNodeIds: next,
+            _dragAxisLock: nextLock,
+            ...(clearStart ? { _nodeDragStartPos: null } : {}),
+          });
         } else {
           set({ nodes: newNodes });
         }

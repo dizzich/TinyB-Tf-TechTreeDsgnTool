@@ -9,6 +9,7 @@ import {
   type EdgeProps,
 } from '@xyflow/react';
 import { useStore } from '../store/useStore';
+import { snapToGrid } from '../utils/snapToGrid';
 import type { EdgeWaypoint } from '../types';
 import type { EdgeType } from '../types';
 
@@ -52,8 +53,7 @@ function buildSvgPathWithWaypoints(
       if (dx < 0.5 || dy < 0.5) {
         d += ` L ${cur.x} ${cur.y}`;
       } else {
-        const mx = (prev.x + cur.x) / 2;
-        d += ` L ${mx} ${prev.y} L ${mx} ${cur.y} L ${cur.x} ${cur.y}`;
+        d += ` L ${cur.x} ${prev.y} L ${cur.x} ${cur.y}`;
       }
     }
     return d;
@@ -69,17 +69,16 @@ function buildSvgPathWithWaypoints(
       if (dx < 0.5 || dy < 0.5) {
         d += ` L ${cur.x} ${cur.y}`;
       } else {
-        const mx = (prev.x + cur.x) / 2;
-        const r = Math.min(radius, dx / 2, dy / 2);
+        const r = Math.min(radius, dx, dy);
         if (r > 0.5) {
           const toRight = cur.x > prev.x, toDown = cur.y > prev.y;
-          d += ` L ${mx + (toRight ? -r : r)} ${prev.y}`;
-          d += ` Q ${mx} ${prev.y} ${mx} ${prev.y + (toDown ? r : -r)}`;
-          d += ` L ${mx} ${cur.y + (toDown ? -r : r)}`;
-          d += ` Q ${mx} ${cur.y} ${mx + (toRight ? r : -r)} ${cur.y}`;
+          d += ` L ${cur.x + (toRight ? -r : r)} ${prev.y}`;
+          d += ` Q ${cur.x} ${prev.y} ${cur.x} ${prev.y + (toDown ? r : -r)}`;
+          d += ` L ${cur.x} ${cur.y + (toDown ? -r : r)}`;
+          d += ` Q ${cur.x} ${cur.y} ${cur.x + (toRight ? r : -r)} ${cur.y}`;
           d += ` L ${cur.x} ${cur.y}`;
         } else {
-          d += ` L ${mx} ${prev.y} L ${mx} ${cur.y} L ${cur.x} ${cur.y}`;
+          d += ` L ${cur.x} ${prev.y} L ${cur.x} ${cur.y}`;
         }
       }
     }
@@ -117,7 +116,7 @@ interface PolylineSegment {
   insertIdx: number;
 }
 
-/** Get polyline segments for orthogonal/smoothstep path (matches actual rendered path). */
+/** Get polyline segments for orthogonal/smoothstep path (H-first, matches actual rendered path). */
 function getOrthogonalPolylineSegments(pts: EdgeWaypoint[]): PolylineSegment[] {
   const n = normalizePtsForOrthogonal(pts);
   const segments: PolylineSegment[] = [];
@@ -127,10 +126,8 @@ function getOrthogonalPolylineSegments(pts: EdgeWaypoint[]): PolylineSegment[] {
     if (dx < 0.5 || dy < 0.5) {
       segments.push({ ax: prev.x, ay: prev.y, bx: cur.x, by: cur.y, insertIdx: i - 1 });
     } else {
-      const mx = (prev.x + cur.x) / 2;
-      segments.push({ ax: prev.x, ay: prev.y, bx: mx, by: prev.y, insertIdx: i - 1 });
-      segments.push({ ax: mx, ay: prev.y, bx: mx, by: cur.y, insertIdx: i - 1 });
-      segments.push({ ax: mx, ay: cur.y, bx: cur.x, by: cur.y, insertIdx: i - 1 });
+      segments.push({ ax: prev.x, ay: prev.y, bx: cur.x, by: prev.y, insertIdx: i - 1 });
+      segments.push({ ax: cur.x, ay: prev.y, bx: cur.x, by: cur.y, insertIdx: i - 1 });
     }
   }
   return segments;
@@ -177,71 +174,15 @@ function normalizePtsForOrthogonal(pts: EdgeWaypoint[]): EdgeWaypoint[] {
 
 /** Default corner waypoints for step/smoothstep with no user waypoints.
  *  Returns two axis-aligned corners that form a clean L-shape. */
-function getDefaultCornerWaypoints(sx: number, sy: number, tx: number, ty: number): EdgeWaypoint[] {
+function getDefaultCornerWaypoints(
+  sx: number, sy: number, tx: number, ty: number, gridSize = 8
+): EdgeWaypoint[] {
   if (Math.abs(sy - ty) < 0.5 || Math.abs(sx - tx) < 0.5) return [];
-  const mx = Math.round((sx + tx) / 2);
-  return [{ x: mx, y: Math.round(sy) }, { x: mx, y: Math.round(ty) }];
-}
-
-interface CornerHandle {
-  x: number;
-  y: number;
-  kind: 'existing' | 'virtual' | 'bend';
-  waypointIdx: number;
-  defaultCorners: EdgeWaypoint[];
-  /** For bend handles: x of neighbor point for formula wp.x = 2*pos.x - neighborX */
-  neighborX?: number;
-}
-
-function getAllCornerHandles(
-  sx: number, sy: number, tx: number, ty: number, waypoints: EdgeWaypoint[]
-): CornerHandle[] {
-  if (waypoints.length === 0) {
-    const defaults = getDefaultCornerWaypoints(sx, sy, tx, ty);
-    return defaults.map((c, i) => ({
-      x: c.x, y: c.y,
-      kind: 'virtual' as const,
-      waypointIdx: i,
-      defaultCorners: defaults,
-    }));
-  }
-  // Use same normalized pts as path building so handles match path geometry
-  const pts = normalizePtsForOrthogonal([{ x: sx, y: sy }, ...waypoints, { x: tx, y: ty }]);
-  const handles: CornerHandle[] = [];
-  for (let i = 1; i < pts.length; i++) {
-    const prev = pts[i - 1], cur = pts[i];
-    const dx = Math.abs(prev.x - cur.x), dy = Math.abs(prev.y - cur.y);
-    if (dx < 0.5 || dy < 0.5) continue;
-    const mx = (prev.x + cur.x) / 2;
-    // First bend (mx, prev.y): update cur -> waypointIdx = i-1
-    if (i < pts.length - 1) {
-      handles.push({
-        x: mx, y: prev.y,
-        kind: 'bend',
-        waypointIdx: i - 1,
-        defaultCorners: [],
-        neighborX: prev.x,
-      });
-    }
-    // Second bend (mx, cur.y): update prev -> waypointIdx = i-2
-    if (i > 1) {
-      handles.push({
-        x: mx, y: cur.y,
-        kind: 'bend',
-        waypointIdx: i - 2,
-        defaultCorners: [],
-        neighborX: cur.x,
-      });
-    }
-  }
-  // Dedupe: two bends can share the same waypointIdx when segment has one waypoint
-  const seen = new Set<string>();
-  return handles.filter((h) => {
-    const key = `${h.x.toFixed(0)},${h.y.toFixed(0)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const mxVal = (sx + tx) / 2;
+  const { x: mx } = snapToGrid(mxVal, sy, gridSize);
+  const { y: y0 } = snapToGrid(sx, sy, gridSize);
+  const { y: y1 } = snapToGrid(sx, ty, gridSize);
+  return [{ x: mx, y: y0 }, { x: mx, y: y1 }];
 }
 
 // ---- Context menu state ----
@@ -265,12 +206,14 @@ const EditableEdge: React.FC<Props> = ({
   const addEdgeWaypoint = useStore((s) => s.addEdgeWaypoint);
   const removeEdgeWaypoint = useStore((s) => s.removeEdgeWaypoint);
   const pushSnapshot = useStore((s) => s._pushSnapshot);
+  const snapEnabled = useStore((s) => s.settings.snapEnabled ?? true);
+  const gridSize = useStore((s) => s.settings.snapGridSize ?? 8);
+  const effectiveGridSize = snapEnabled && gridSize > 0 ? gridSize : 0;
   const { screenToFlowPosition } = useReactFlow();
 
   const [hoveredWp, setHoveredWp] = useState<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const [lineDrag, setLineDrag] = useState<{ idx: number } | null>(null);
-  const [draggingCornerIdx, setDraggingCornerIdx] = useState<number | null>(null);
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
   const ctxRef = useRef<HTMLDivElement>(null);
 
@@ -288,10 +231,10 @@ const EditableEdge: React.FC<Props> = ({
 
   const effectiveWaypoints = useMemo(() => {
     if (hasSquareCorners && waypoints.length === 0) {
-      return getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY);
+      return getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY, effectiveGridSize);
     }
     return waypoints;
-  }, [hasSquareCorners, waypoints, sourceX, sourceY, targetX, targetY]);
+  }, [hasSquareCorners, waypoints, sourceX, sourceY, targetX, targetY, effectiveGridSize]);
 
   const svgPath = useMemo(() => {
     if (effectiveWaypoints.length === 0 && waypoints.length === 0) {
@@ -307,21 +250,22 @@ const EditableEdge: React.FC<Props> = ({
     [sourceX, sourceY, effectiveWaypoints, targetX, targetY]
   );
 
-  const cornerHandles = useMemo(() => {
-    if (!hasSquareCorners) return [];
-    return getAllCornerHandles(sourceX, sourceY, targetX, targetY, waypoints);
-  }, [hasSquareCorners, sourceX, sourceY, targetX, targetY, waypoints]);
-
   // ---- Drag existing waypoint ----
   const handleWpPointerDown = useCallback((e: React.PointerEvent, idx: number) => {
     e.stopPropagation(); e.preventDefault();
     pushSnapshot();
+    if (hasSquareCorners && waypoints.length === 0) {
+      updateEdgeWaypoints(id, [...getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY, effectiveGridSize)], true);
+    }
     setDragging(idx);
     const onMove = (ev: PointerEvent) => {
       const pos = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
-      const next = [...waypoints];
-      next[idx] = { x: Math.round(pos.x), y: Math.round(pos.y) };
-      updateEdgeWaypoints(id, next, true);
+      const currentWps = useStore.getState().edges.find((e) => e.id === id)?.waypoints ?? [];
+      const next = [...currentWps];
+      if (idx >= 0 && idx < next.length) {
+        next[idx] = effectiveGridSize > 0 ? snapToGrid(pos.x, pos.y, effectiveGridSize) : { x: pos.x, y: pos.y };
+        updateEdgeWaypoints(id, next, true);
+      }
     };
     const onUp = () => {
       document.removeEventListener('pointermove', onMove);
@@ -331,54 +275,24 @@ const EditableEdge: React.FC<Props> = ({
     };
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
-  }, [id, waypoints, updateEdgeWaypoints, screenToFlowPosition, pushSnapshot]);
+  }, [id, waypoints, updateEdgeWaypoints, screenToFlowPosition, pushSnapshot, hasSquareCorners, sourceX, sourceY, targetX, targetY, effectiveGridSize]);
 
   // ---- Double-click waypoint to remove ----
   const handleWpDoubleClick = useCallback((e: React.MouseEvent, idx: number) => {
     e.stopPropagation();
-    removeEdgeWaypoint(id, idx);
-  }, [id, removeEdgeWaypoint]);
-
-  // ---- Drag corner handle (orthogonal/smoothstep) ----
-  const handleCornerPointerDown = useCallback((e: React.PointerEvent, h: CornerHandle, handleIdx: number) => {
-    e.stopPropagation(); e.preventDefault();
-    pushSnapshot();
-    setDraggingCornerIdx(handleIdx);
-
-    const wpIdx = h.waypointIdx;
-    if (h.kind === 'virtual') {
-      updateEdgeWaypoints(id, [...h.defaultCorners], true);
+    if (hasSquareCorners && waypoints.length === 0) {
+      updateEdgeWaypoints(id, [...getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY, effectiveGridSize)], true);
     }
-
-    const onMove = (ev: PointerEvent) => {
-      const pos = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
-      const currentWps = useStore.getState().edges.find((e) => e.id === id)?.waypoints ?? [];
-      const next = [...currentWps];
-      if (wpIdx >= 0 && wpIdx < next.length) {
-        if (h.kind === 'bend' && h.neighborX != null) {
-          const wp = next[wpIdx];
-          next[wpIdx] = { x: Math.round(2 * pos.x - h.neighborX), y: wp.y };
-        } else {
-          next[wpIdx] = { x: Math.round(pos.x), y: Math.round(pos.y) };
-        }
-        updateEdgeWaypoints(id, next, true);
-      }
-    };
-    const onUp = () => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      setDraggingCornerIdx(null);
-      updateEdgeWaypoints(id, useStore.getState().edges.find((e) => e.id === id)?.waypoints ?? [], false);
-    };
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-  }, [id, updateEdgeWaypoints, screenToFlowPosition, pushSnapshot]);
+    removeEdgeWaypoint(id, idx);
+  }, [id, removeEdgeWaypoint, hasSquareCorners, waypoints.length, updateEdgeWaypoints, sourceX, sourceY, targetX, targetY, effectiveGridSize]);
 
   // ---- Click "+" to add waypoint at segment midpoint ----
   const handleAddWaypoint = useCallback((e: React.MouseEvent, segmentIdx: number) => {
     e.stopPropagation();
-    addEdgeWaypoint(id, segmentIdx, mid(allPoints[segmentIdx], allPoints[segmentIdx + 1]));
-  }, [id, allPoints, addEdgeWaypoint]);
+    const mp = mid(allPoints[segmentIdx], allPoints[segmentIdx + 1]);
+    const pt = effectiveGridSize > 0 ? snapToGrid(mp.x, mp.y, effectiveGridSize) : { x: mp.x, y: mp.y };
+    addEdgeWaypoint(id, segmentIdx, pt);
+  }, [id, allPoints, addEdgeWaypoint, effectiveGridSize]);
 
   // ---- Drag on connector line to insert + immediately drag new waypoint ----
   const handleLineDragStart = useCallback((e: React.PointerEvent) => {
@@ -386,7 +300,7 @@ const EditableEdge: React.FC<Props> = ({
     e.stopPropagation(); e.preventDefault();
     pushSnapshot();
     const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    const wp: EdgeWaypoint = { x: Math.round(flowPos.x), y: Math.round(flowPos.y) };
+    const wp = effectiveGridSize > 0 ? snapToGrid(flowPos.x, flowPos.y, effectiveGridSize) : { x: flowPos.x, y: flowPos.y };
     const segIdx = findNearestSegment(wp, allPoints, pathStyle);
     addEdgeWaypoint(id, segIdx, wp);
     const newIdx = segIdx;
@@ -397,7 +311,7 @@ const EditableEdge: React.FC<Props> = ({
       const currentWps = useStore.getState().edges.find((e) => e.id === id)?.waypoints ?? [];
       const next = [...currentWps];
       if (next[newIdx]) {
-        next[newIdx] = { x: Math.round(pos.x), y: Math.round(pos.y) };
+        next[newIdx] = effectiveGridSize > 0 ? snapToGrid(pos.x, pos.y, effectiveGridSize) : { x: pos.x, y: pos.y };
         updateEdgeWaypoints(id, next, true);
       }
     };
@@ -409,7 +323,7 @@ const EditableEdge: React.FC<Props> = ({
     };
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
-  }, [id, allPoints, addEdgeWaypoint, updateEdgeWaypoints, screenToFlowPosition, pushSnapshot, pathStyle]);
+  }, [id, allPoints, addEdgeWaypoint, updateEdgeWaypoints, screenToFlowPosition, pushSnapshot, pathStyle, effectiveGridSize]);
 
   // ---- Right-click on edge line ----
   const handleEdgeContextMenu = useCallback((e: React.MouseEvent) => {
@@ -421,17 +335,21 @@ const EditableEdge: React.FC<Props> = ({
   // ---- Right-click on waypoint ----
   const handleWpContextMenu = useCallback((e: React.MouseEvent, idx: number) => {
     e.preventDefault(); e.stopPropagation();
+    if (hasSquareCorners && waypoints.length === 0) {
+      updateEdgeWaypoints(id, [...getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY, effectiveGridSize)], true);
+    }
     const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
     setCtxMenu({ x: e.clientX, y: e.clientY, type: 'waypoint', waypointIdx: idx, flowPos });
-  }, [screenToFlowPosition]);
+  }, [screenToFlowPosition, hasSquareCorners, waypoints.length, updateEdgeWaypoints, id, sourceX, sourceY, targetX, targetY, effectiveGridSize]);
 
   // ---- Context menu actions ----
   const ctxAddWaypoint = useCallback(() => {
     if (!ctxMenu) return;
     const segIdx = findNearestSegment(ctxMenu.flowPos, allPoints, pathStyle);
-    addEdgeWaypoint(id, segIdx, { x: Math.round(ctxMenu.flowPos.x), y: Math.round(ctxMenu.flowPos.y) });
+    const pt = effectiveGridSize > 0 ? snapToGrid(ctxMenu.flowPos.x, ctxMenu.flowPos.y, effectiveGridSize) : { x: ctxMenu.flowPos.x, y: ctxMenu.flowPos.y };
+    addEdgeWaypoint(id, segIdx, pt);
     setCtxMenu(null);
-  }, [ctxMenu, allPoints, id, addEdgeWaypoint, pathStyle]);
+  }, [ctxMenu, allPoints, id, addEdgeWaypoint, pathStyle, effectiveGridSize]);
 
   const ctxClearWaypoints = useCallback(() => {
     updateEdgeWaypoints(id, []);
@@ -443,7 +361,7 @@ const EditableEdge: React.FC<Props> = ({
     setCtxMenu(null);
   }, [ctxMenu, id, removeEdgeWaypoint]);
 
-  const showControls = selected || dragging !== null || lineDrag !== null || draggingCornerIdx !== null;
+  const showControls = selected || dragging !== null || lineDrag !== null;
 
   return (
     <>
@@ -464,24 +382,8 @@ const EditableEdge: React.FC<Props> = ({
       {showControls && (
         <EdgeLabelRenderer>
           <div style={{ pointerEvents: 'none' }}>
-            {/* Step/smoothstep: corner handles at all bend points */}
-            {hasSquareCorners && cornerHandles.map((h, idx) => (
-              <div
-                key={`corner-${idx}`}
-                className="editable-edge-waypoint editable-edge-bend"
-                data-dragging={draggingCornerIdx === idx || undefined}
-                style={{
-                  position: 'absolute',
-                  transform: `translate(-50%, -50%) translate(${h.x}px, ${h.y}px)`,
-                  pointerEvents: 'all',
-                }}
-                onPointerDown={(e) => handleCornerPointerDown(e, h, idx)}
-                onDoubleClick={(h.kind === 'existing' || h.kind === 'bend') ? (e) => handleWpDoubleClick(e, h.waypointIdx) : undefined}
-                onContextMenu={(h.kind === 'existing' || h.kind === 'bend') ? (e) => handleWpContextMenu(e, h.waypointIdx) : undefined}
-              />
-            ))}
-            {/* Waypoint drag handles (circles) only for bezier/straight — orthogonal uses corner handles */}
-            {!hasSquareCorners && waypoints.map((wp, idx) => (
+            {/* Waypoint drag handles for all path styles including orthogonal/smoothstep */}
+            {effectiveWaypoints.map((wp, idx) => (
               <div
                 key={`wp-${idx}`}
                 className="editable-edge-waypoint"

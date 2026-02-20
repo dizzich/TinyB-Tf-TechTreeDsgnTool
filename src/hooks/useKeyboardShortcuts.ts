@@ -15,9 +15,13 @@ export const useKeyboardShortcuts = () => {
   const setNodes = useStore((state) => state.setNodes);
   const modals = useStore((state) => state.modals);
   const canvasFilter = useStore((state) => state.canvasFilter);
+  const setShiftKeyPressed = useStore((state) => state.setShiftKeyPressed);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        setShiftKeyPressed(true);
+      }
       // Don't trigger shortcuts when modals are open or in input fields
       const isModalOpen = Object.values(modals).some((isOpen) => isOpen);
       const isInInput =
@@ -95,8 +99,18 @@ export const useKeyboardShortcuts = () => {
       }
     };
 
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        setShiftKeyPressed(false);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, [
     nodes,
     edges,
@@ -109,5 +123,6 @@ export const useKeyboardShortcuts = () => {
     openProject,
     loadProject,
     setNodes,
+    setShiftKeyPressed,
   ]);
 };

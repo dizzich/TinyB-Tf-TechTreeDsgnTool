@@ -5,6 +5,7 @@ import '@xyflow/react/dist/style.css';
 import { useStore } from '../store/useStore';
 import TechNode from './TechNode';
 import EditableEdge from './EditableEdge';
+import { AxisLockGuide } from './AxisLockGuide';
 import { nodeMatchesRules } from '../utils/filterUtils';
 import type { TechNode as TechNodeType, CanvasFilter } from '../types';
 
@@ -38,6 +39,8 @@ export const Graph = () => {
   }));
 
   const theme = useStore((state) => state.ui.theme);
+  const snapEnabled = useStore((state) => state.settings.snapEnabled ?? true);
+  const snapGridSize = useStore((state) => state.settings.snapGridSize ?? 8);
   const edgeType = useStore((state) => state.settings.edgeType) ?? 'default';
   const edgeStrokeWidth = useStore((state) => state.settings.edgeStrokeWidth) ?? 2;
   const edgeAnimated = useStore((state) => state.settings.edgeAnimated) ?? false;
@@ -186,6 +189,8 @@ export const Graph = () => {
         minZoom={0.05}
         maxZoom={2.5}
         elementsSelectable={true}
+        snapToGrid={snapEnabled && snapGridSize > 0}
+        snapGrid={[snapGridSize, snapGridSize]}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
@@ -205,6 +210,7 @@ export const Graph = () => {
           gap={20}
           size={1}
         />
+        <AxisLockGuide />
         <Controls />
       </ReactFlow>
     </div>

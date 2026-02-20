@@ -27,6 +27,7 @@ import {
   ArrowLeftRight,
   ArrowUpDown,
   PenTool,
+  Grid3X3,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { getLayoutedElements, layoutSubgraph } from '../utils/autoLayout';
@@ -87,6 +88,8 @@ export const Toolbar = () => {
   const canvasFilterRef = useRef<HTMLDivElement>(null);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const layoutMenuRef = useRef<HTMLDivElement>(null);
+  const [snapMenuOpen, setSnapMenuOpen] = useState(false);
+  const snapMenuRef = useRef<HTMLDivElement>(null);
 
   const canvasFilter = useStore((state) => state.canvasFilter);
   const setCanvasFilter = useStore((state) => state.setCanvasFilter);
@@ -140,6 +143,16 @@ export const Toolbar = () => {
     if (layoutMenuOpen) document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [layoutMenuOpen]);
+
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (snapMenuRef.current && !snapMenuRef.current.contains(e.target as Node)) {
+        setSnapMenuOpen(false);
+      }
+    };
+    if (snapMenuOpen) document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [snapMenuOpen]);
 
   const EDGE_TYPE_OPTIONS: { value: EdgeType; label: string; icon: typeof Spline }[] = [
     { value: 'default', label: 'Изогнутые', icon: Spline },
@@ -398,6 +411,82 @@ export const Toolbar = () => {
                 <ArrowUpDown size={16} strokeWidth={1.75} />
                 В ряд по вертикали
               </button>
+            </div>
+          )}
+        </div>
+
+        <div className="h-5 w-px bg-panel-border mx-1" aria-hidden />
+
+        {/* Snap: toggle + dropdown */}
+        <div className="relative flex items-center" ref={snapMenuRef}>
+          <button
+            type="button"
+            onClick={() => updateSettings({ snapEnabled: !(settings.snapEnabled ?? true) })}
+            className={`${iconBtnClass} w-9 flex items-center justify-center rounded-r-none -mr-px ${
+              (settings.snapEnabled ?? true)
+                ? '!text-accent !border-accent bg-accent/15 shadow-[0_0_8px_rgba(106,162,255,0.4)] ring-1 ring-accent/40'
+                : ''
+            }`}
+            title={(settings.snapEnabled ?? true) ? 'Выкл привязку' : 'Вкл привязку'}
+            aria-label="Привязка"
+            aria-pressed={settings.snapEnabled ?? true}
+          >
+            <Grid3X3 size={18} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSnapMenuOpen((o) => !o);
+            }}
+            className="icon-btn w-6 h-9 flex items-center justify-center rounded-r-control rounded-l-none border border-control-border-muted text-muted hover:text-accent hover:border-accent/50 transition-all"
+            title="Настройки привязки"
+            aria-label="Меню привязки"
+          >
+            <ChevronDown
+              size={14}
+              strokeWidth={1.75}
+              className={`transition-transform ${snapMenuOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {snapMenuOpen && (
+            <div
+              className="absolute top-full left-0 mt-1 py-1 min-w-[220px] rounded-control border border-panel-border bg-panel shadow-floating z-50"
+              role="menu"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-3 py-2 flex items-center gap-2">
+                <label className="text-xs font-semibold text-muted shrink-0">Шаг сетки (px)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={64}
+                  step={1}
+                  value={settings.snapGridSize ?? 8}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!Number.isNaN(v) && v >= 0) updateSettings({ snapGridSize: v });
+                  }}
+                  className="w-16 px-2 py-1 text-sm rounded-control border border-control-border bg-control-bg text-text focus:border-accent focus:outline-none"
+                />
+                <span className="text-xs text-muted">0 = выкл</span>
+              </div>
+              <div className="my-1 border-t border-panel-border" />
+              <label className="flex items-center gap-2 px-3 py-2 cursor-pointer text-sm text-text hover:bg-control-hover-bg">
+                <input
+                  type="checkbox"
+                  checked={settings.snapToObjects ?? false}
+                  onChange={(e) => updateSettings({ snapToObjects: e.target.checked })}
+                  className="w-3.5 h-3.5 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
+                />
+                Привязка к соседним объектам
+              </label>
+              <p className="text-[10px] text-muted px-3 pb-1 leading-tight">
+                Выравнивание по краям и центрам рядом расположенных узлов.
+              </p>
+              <p className="text-[10px] text-muted px-3 pb-2 leading-tight">
+                Shift + перетаскивание — фиксация по оси соседней ноды.
+              </p>
             </div>
           )}
         </div>
