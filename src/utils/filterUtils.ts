@@ -26,7 +26,7 @@ function getPropertyValue(node: TechNode, property: FilterProperty): string {
     if (raw === undefined || raw === null || raw === '') return '';
     return String(raw).trim();
   }
-  if (property === 'usedStation') {
+  if (property === 'formulaUsedStation' || property === 'usedStation') {
     const raw = node.data?.usedStations?.map((r: { name?: string }) => r.name).filter(Boolean).join(', ');
     if (raw === undefined || raw === null || raw === '') return '';
     return String(raw).trim();
@@ -92,7 +92,7 @@ export function buildUniqueValuesMap(nodes: TechNode[]): Record<FilterProperty, 
   const props: FilterProperty[] = [
     'act', 'stage', 'category', 'powerType', 'gameStatus', 'designStatus',
     'notionSyncStatus', 'techGameStatus', 'techForAct', 'openCondition',
-    'openConditionRefs', 'outputItem', 'formulaUsedStation', 'usedCraftStation', 'usedStation', 'itemLootingInAct',
+    'openConditionRefs', 'outputItem', 'usedCraftStation', 'usedStation', 'itemLootingInAct',
     'electricCost', 'researchTime',
   ];
   const out: Record<string, string[]> = {};

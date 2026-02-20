@@ -14,6 +14,7 @@ export const useKeyboardShortcuts = () => {
   const loadProject = useStore((state) => state.loadProject);
   const setCurrentFileName = useStore((state) => state.setCurrentFileName);
   const setNodes = useStore((state) => state.setNodes);
+  const setEdges = useStore((state) => state.setEdges);
   const modals = useStore((state) => state.modals);
   const canvasFilter = useStore((state) => state.canvasFilter);
   const setShiftKeyPressed = useStore((state) => state.setShiftKeyPressed);
@@ -120,6 +121,8 @@ export const useKeyboardShortcuts = () => {
         event.preventDefault();
         const updatedNodes = nodes.map((n) => ({ ...n, selected: false }));
         setNodes(updatedNodes);
+        const updatedEdges = edges.map((e) => ({ ...e, selected: false }));
+        setEdges(updatedEdges);
         return;
       }
     };
@@ -139,6 +142,7 @@ export const useKeyboardShortcuts = () => {
   }, [
     nodes,
     edges,
+    setEdges,
     meta,
     settings,
     modals,

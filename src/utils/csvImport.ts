@@ -137,7 +137,6 @@ export const generateGraphFromCSV = (
 
       // Formula fields (plain text, no URLs)
       formulaIngridients: row.formulaIngridients,
-      formulaUsedStation: row.formulaUsedStation,
       outputItem: row.OutputItem,
 
       // Parsed structured data

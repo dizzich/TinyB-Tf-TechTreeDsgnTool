@@ -144,7 +144,6 @@ export const exportToNotionCsv = (nodes: TechNode[], edges: TechEdge[]) => {
       TechTerms: d.TechTerms ?? '',
       UsedStation: usedStationStr,
       formulaIngridients: d.formulaIngridients ?? '',
-      formulaUsedStation: d.formulaUsedStation ?? '',
     };
   });
 

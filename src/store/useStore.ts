@@ -713,6 +713,11 @@ export const useStore = create<AppState>()((set, get) => ({
       setCanvasFilter: (filter) => {
         const current = get().canvasFilter;
         const next = { ...current, ...filter };
+        if (next.rules?.length) {
+          next.rules = next.rules.map((r) =>
+            r.property === 'formulaUsedStation' ? { ...r, property: 'usedStation' as const } : r
+          );
+        }
         next.enabled = (next.rules?.length ?? 0) > 0;
         set({ canvasFilter: next });
       },

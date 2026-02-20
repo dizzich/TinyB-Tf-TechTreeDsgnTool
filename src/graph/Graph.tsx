@@ -104,7 +104,7 @@ export const Graph = () => {
       type: manualEdgeMode ? 'editableEdge' : edgeType,
       style: { stroke: 'var(--edge-stroke)', strokeWidth: edgeStrokeWidth },
       animated: edgeAnimated,
-      ...(manualEdgeMode ? { selectable: true } : {}),
+      selectable: true,
       ...(manualEdgeMode
         ? {
             data: {
@@ -177,6 +177,12 @@ export const Graph = () => {
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       if (event.code === 'Delete' || event.code === 'Backspace') {
+        const selectedEdges = edges.filter((e) => e.selected);
+        if (selectedEdges.length > 0) {
+          onEdgesChange(selectedEdges.map((e) => ({ type: 'remove' as const, id: e.id })));
+          event.preventDefault();
+          return;
+        }
         const selectedNodes = nodes.filter((n) => n.selected);
         if (selectedNodes.length > 0) {
           const nodeIds = selectedNodes.map((n) => n.id);
@@ -185,7 +191,7 @@ export const Graph = () => {
         }
       }
     },
-    [nodes, deleteNodes]
+    [nodes, edges, deleteNodes, onEdgesChange]
   );
 
   return (

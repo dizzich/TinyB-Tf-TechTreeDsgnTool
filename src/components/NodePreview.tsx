@@ -9,6 +9,14 @@ const SAMPLE_DATA = {
   act: 1,
   stage: 2,
   category: 'Craft',
+  powerType: 'Electricity',
+  gameStatus: 'implemented',
+  usedStations: [{ name: 'Станция' }],
+  usedCraftStation: 'Верстак',
+  techForAct: '🌳 Act 1',
+  openCondition: 'Условие',
+  tags: ['тег1', 'тег2'],
+  outputItem: 'Результат',
 };
 
 export interface NodePreviewSettings {

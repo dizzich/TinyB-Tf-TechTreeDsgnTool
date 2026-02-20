@@ -457,7 +457,7 @@ export const NotionSyncModal = () => {
         onChange={(e) => setMapping({ ...mapping, [key]: e.target.value })}
       >
         <option value="">(None)</option>
-        {dbProperties.map((p) => (
+        {dbProperties.filter((p) => p !== 'formulaUsedStation').map((p) => (
           <option key={p} value={p}>{p}</option>
         ))}
       </select>

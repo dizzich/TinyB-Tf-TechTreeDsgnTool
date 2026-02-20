@@ -62,12 +62,33 @@ export const SettingsModal = () => {
     { key: '%act%', desc: 'Номер акта' },
     { key: '%stage%', desc: 'Номер стадии' },
     { key: '%category%', desc: 'Название категории' },
+    { key: '%description%', desc: 'Описание' },
+    { key: '%tags%', desc: 'Теги (через запятую)' },
     { key: '%techCraftId%', desc: 'TechCraft ID' },
     { key: '%outputItem%', desc: 'Результат крафта' },
+    { key: '%formulaIngridients%', desc: 'Ингредиенты (текст)' },
+    { key: '%ingredients%', desc: 'Ингредиенты (парсинг)' },
+    { key: '%recipeDetail%', desc: 'Рецепт с кол-вом' },
+    { key: '%outputDetail%', desc: 'Детали выхода' },
+    { key: '%usedStation%', desc: 'Станция крафта (UsedStation)' },
+    { key: '%usedCraftStation%', desc: 'На чём крафтится' },
+    { key: '%usedCraftStationRefs%', desc: 'На чём крафтится (refs)' },
+    { key: '%outputItemRef%', desc: 'Результат (Notion ref)' },
+    { key: '%powerType%', desc: 'Тип питания' },
     { key: '%gameStatus%', desc: 'Игровой статус' },
     { key: '%designStatus%', desc: 'Статус дизайна' },
-    { key: '%formulaIngridients%', desc: 'Ингредиенты' },
-    { key: '%formulaUsedStation%', desc: 'Станция крафта' },
+    { key: '%notionSyncStatus%', desc: 'Статус Notion' },
+    { key: '%techGameStatus%', desc: 'Статус тех. в игре' },
+    { key: '%techForAct%', desc: 'Тех. акт (🌳Act 1)' },
+    { key: '%openCondition%', desc: 'Условие открытия' },
+    { key: '%openConditionRefs%', desc: 'Условия (refs)' },
+    { key: '%prevTechRefs%', desc: 'Предыдущие тех.' },
+    { key: '%nextTechRefs%', desc: 'Следующие тех.' },
+    { key: '%itemLootingInAct%', desc: 'Лут в акте' },
+    { key: '%electricCost%', desc: 'Энергозатраты' },
+    { key: '%researchTime%', desc: 'Время исследования' },
+    { key: '%notes%', desc: 'Заметки' },
+    { key: '%notionPageId%', desc: 'ID страницы Notion' },
   ];
 
   return (
@@ -263,7 +284,7 @@ export const SettingsModal = () => {
                   placeholder="%label%\n%act% %stage% | %category%"
                 />
                 <p className="mt-1 text-xs text-muted">
-                  Используйте заполнители типа %label%, %act% и т.д. по полям NodeData. Неизвестные — пустые.
+                  Формат: %имяПоля%. Полный список — в блоке «Доступные заполнители» ниже. Неизвестные поля выводятся пустыми.
                 </p>
               </div>
 
@@ -442,7 +463,7 @@ export const SettingsModal = () => {
 
               <div>
                 <h3 className="text-sm font-medium text-text mb-2">Доступные заполнители</h3>
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
                   {placeholders.map(({ key, desc }) => (
                     <div key={key} className="flex items-start gap-2">
                       <code className="text-xs bg-control-bg-muted px-1.5 py-0.5 rounded-small text-text border border-control-border-muted shrink-0">

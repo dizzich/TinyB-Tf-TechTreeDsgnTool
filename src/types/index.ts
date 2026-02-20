@@ -30,7 +30,6 @@ export interface NodeData {
 
   // --- Craft recipe data ---
   formulaIngridients?: string;
-  formulaUsedStation?: string;
   outputItem?: string;
   /** Parsed ingredients with Notion refs */
   ingredients?: IngredientEntry[];
@@ -280,7 +279,6 @@ export type FilterProperty =
   | 'openCondition'
   | 'openConditionRefs'
   | 'outputItem'
-  | 'formulaUsedStation'
   | 'usedCraftStation'
   | 'usedStation'
   | 'itemLootingInAct'

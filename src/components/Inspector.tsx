@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Trash2, ChevronDown, ChevronRight, Copy, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronRight, Copy, ArrowRight, ArrowLeft, Link } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useReactFlow } from '@xyflow/react';
 import { resolveNodeColor } from '../utils/colorMapping';
@@ -161,6 +161,8 @@ export const Inspector = () => {
   const deleteNodes = useStore((state) => state.deleteNodes);
   const setNodes = useStore((state) => state.setNodes);
   const toggleInspector = useStore((state) => state.toggleInspector);
+  const setConnectedSubgraphHighlight = useStore((state) => state.setConnectedSubgraphHighlight);
+  const onEdgesChange = useStore((state) => state.onEdgesChange);
 
   const [rawDataCollapsed, setRawDataCollapsed] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -194,6 +196,19 @@ export const Inspector = () => {
     if (targetNode && reactFlowInstance) {
       reactFlowInstance.fitView({ padding: 0.5, nodes: [{ id: nodeId }], duration: 300 });
     }
+  };
+
+  const handleSelectEdge = (edge: { id: string; source: string; target: string }) => {
+    const nodeIds = new Set<string>([edge.source, edge.target]);
+    const edgeIds = new Set<string>([edge.id]);
+    setConnectedSubgraphHighlight({ nodeIds, edgeIds });
+    if (reactFlowInstance) {
+      reactFlowInstance.fitView({ padding: 0.5, nodes: [{ id: edge.source }, { id: edge.target }], duration: 300 });
+    }
+  };
+
+  const handleDeleteEdge = (edge: { id: string }) => {
+    onEdgesChange([{ type: 'remove', id: edge.id }]);
   };
 
   const handleDeleteNode = () => {
@@ -505,52 +520,7 @@ export const Inspector = () => {
                 </div>
               </div>
             )}
-            {(d?.usedCraftStationRefs?.length || d?.usedCraftStation) && (
-              <div>
-                <label className={labelClass}>На чём крафтится (UsedCraftStation)</label>
-                {d.usedCraftStationRefs?.length ? (
-                  <div className="space-y-1">
-                    {d.usedCraftStationRefs.map((ref: { name?: string; pageId?: string }, i: number) => {
-                      const color = getChipColor('usedCraftStation', ref.name);
-                      const style = {
-                        backgroundColor: color ? `${color}20` : undefined,
-                        borderLeftWidth: color ? '3px' : undefined,
-                        borderLeftColor: color || undefined,
-                        boxShadow: color ? `0 0 10px ${color}40` : undefined,
-                      };
-                      const content = (
-                        <>
-                          <span className="truncate flex-1 min-w-0">{ref.name}</span>
-                          {ref.pageId && <NotionIcon size={14} className="flex-shrink-0 ml-1.5 opacity-90" color={color} />}
-                        </>
-                      );
-                      return ref.pageId ? (
-                        <a
-                          key={i}
-                          href={getNotionPageUrl(ref.pageId)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
-                          style={style}
-                          title="Открыть в Notion"
-                        >
-                          {content}
-                        </a>
-                      ) : (
-                        <div key={i} className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
-                          <span className="truncate">{ref.name}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <span className="text-xs px-2 py-1 rounded-[8px] bg-control-bg-muted text-text border border-control-border-muted">
-                    {d.usedCraftStation}
-                  </span>
-                )}
-              </div>
-            )}
-            {(d?.formulaIngridients || d?.formulaUsedStation || d?.outputItem) && (
+            {(d?.formulaIngridients || d?.outputItem) && (
               <div className="space-y-1.5">
                 {d.formulaIngridients && (
                   <div>
@@ -570,14 +540,6 @@ export const Inspector = () => {
                           ) : null;
                         })}
                     </div>
-                  </div>
-                )}
-                {d.formulaUsedStation && (
-                  <div>
-                    <label className={labelClass}>Станция</label>
-                    <span className="text-xs px-2 py-1 rounded-[8px] bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                      {d.formulaUsedStation}
-                    </span>
                   </div>
                 )}
                 {d.outputItem && (
@@ -656,15 +618,40 @@ export const Inspector = () => {
               {incomingEdges.map((edge) => {
                 const sourceNode = nodes.find((n) => n.id === edge.source);
                 return (
-                  <button
-                    key={edge.id}
-                    type="button"
-                    onClick={() => handleJumpToNode(edge.source)}
-                    className="w-full text-left text-xs px-2 py-1.5 rounded-[8px] bg-control-bg-muted hover:bg-control-hover-bg border border-control-border-muted hover:border-control-hover-border text-text flex items-center justify-between transition-colors"
-                  >
-                    <span className="truncate">{sourceNode?.data?.label || edge.source}</span>
-                    <ArrowLeft size={12} className="flex-shrink-0 ml-1" />
-                  </button>
+                  <div key={edge.id} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleJumpToNode(edge.source)}
+                      className="flex-1 min-w-0 text-left text-xs px-2 py-1.5 rounded-[8px] bg-control-bg-muted hover:bg-control-hover-bg border border-control-border-muted hover:border-control-hover-border text-text flex items-center justify-between gap-1.5 transition-colors"
+                    >
+                      <span className="min-w-0 break-words">{sourceNode?.data?.label || edge.source}</span>
+                      <ArrowLeft size={12} className="flex-shrink-0 ml-1" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectEdge(edge);
+                      }}
+                      className="p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                      title="Выделить связь"
+                      aria-label="Выделить связь"
+                    >
+                      <Link size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteEdge(edge);
+                      }}
+                      className="p-1.5 rounded-[6px] text-muted hover:text-danger hover:bg-danger/15 transition-colors flex-shrink-0"
+                      title="Удалить связь"
+                      aria-label="Удалить связь"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -683,15 +670,40 @@ export const Inspector = () => {
               {outgoingEdges.map((edge) => {
                 const targetNode = nodes.find((n) => n.id === edge.target);
                 return (
-                  <button
-                    key={edge.id}
-                    type="button"
-                    onClick={() => handleJumpToNode(edge.target)}
-                    className="w-full text-left text-xs px-2 py-1.5 rounded-[8px] bg-control-bg-muted hover:bg-control-hover-bg border border-control-border-muted hover:border-control-hover-border text-text flex items-center justify-between transition-colors"
-                  >
-                    <span className="truncate">{targetNode?.data?.label || edge.target}</span>
-                    <ArrowRight size={12} className="flex-shrink-0 ml-1" />
-                  </button>
+                  <div key={edge.id} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleJumpToNode(edge.target)}
+                      className="flex-1 min-w-0 text-left text-xs px-2 py-1.5 rounded-[8px] bg-control-bg-muted hover:bg-control-hover-bg border border-control-border-muted hover:border-control-hover-border text-text flex items-center justify-between gap-1.5 transition-colors"
+                    >
+                      <span className="min-w-0 break-words">{targetNode?.data?.label || edge.target}</span>
+                      <ArrowRight size={12} className="flex-shrink-0 ml-1" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectEdge(edge);
+                      }}
+                      className="p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                      title="Выделить связь"
+                      aria-label="Выделить связь"
+                    >
+                      <Link size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteEdge(edge);
+                      }}
+                      className="p-1.5 rounded-[6px] text-muted hover:text-danger hover:bg-danger/15 transition-colors flex-shrink-0"
+                      title="Удалить связь"
+                      aria-label="Удалить связь"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 );
               })}
             </div>
