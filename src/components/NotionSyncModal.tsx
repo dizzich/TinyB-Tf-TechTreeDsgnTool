@@ -58,6 +58,7 @@ export const NotionSyncModal = () => {
   const settings = useStore((s) => s.settings);
   const syncMode = useStore((s) => s.syncMode);
   const setSyncMode = useStore((s) => s.setSyncMode);
+  const notionDirty = useStore((s) => s.notionDirty);
   const setNotionDirty = useStore((s) => s.setNotionDirty);
   const setNotionHasRemoteUpdates = useStore((s) => s.setNotionHasRemoteUpdates);
   const notionHasRemoteUpdates = useStore((s) => s.notionHasRemoteUpdates);
@@ -66,6 +67,7 @@ export const NotionSyncModal = () => {
   const clearDirtyNodes = useStore((s) => s.clearDirtyNodes);
   const dirtyNodeIds = useStore((s) => s.dirtyNodeIds);
   const setAllowBackgroundSync = useStore((s) => s.setAllowBackgroundSync);
+  const setUnsavedChangesResolve = useStore((s) => s.setUnsavedChangesResolve);
 
   const [step, setStep] = useState<Step>(notionConfig ? 'sync' : 'connect');
   const [apiKey, setApiKey] = useState(notionConfig?.apiKey || '');
@@ -162,13 +164,32 @@ export const NotionSyncModal = () => {
     setStep('sync');
   };
 
-  const handleDisconnect = () => {
-    setNotionConfig(null);
-    setNotionConnected(false);
-    setStep('connect');
-    setApiKey('');
-    setDatabaseId('');
-    setDbTitle('');
+  const performDisconnect = () => {
+    const state = useStore.getState();
+    state.setNotionConfig(null);
+    state.setNotionConnected(false);
+    state.setModalOpen('notionSync', false);
+  };
+
+  const handleDisconnect = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    const hasUnsaved = notionDirty && dirtyNodeIds.size > 0;
+    if (hasUnsaved) {
+      if (sessionStorage.getItem('techtree_suppress_unsaved_prompt') === 'true') {
+        performDisconnect();
+      } else {
+        setUnsavedChangesResolve((proceed, suppress) => {
+          if (proceed) {
+            if (suppress) sessionStorage.setItem('techtree_suppress_unsaved_prompt', 'true');
+            performDisconnect();
+          }
+        });
+        setModalOpen('unsavedChanges', true);
+      }
+    } else {
+      performDisconnect();
+    }
   };
 
   const addLog = (msg: string) => {

@@ -36,6 +36,9 @@ interface AppState {
   /** Name of the currently opened local file (from File System API), or null */
   currentFileName: string | null;
 
+  /** Offline project has unsaved changes (cleared on load/save) */
+  offlineDirty: boolean;
+
   // Notion sync state
   notionConfig: NotionConfig | null;
   notionCorsProxy: string;
@@ -83,6 +86,7 @@ interface AppState {
     export: boolean;
     notionSync: boolean;
     colorMapping: boolean;
+    unsavedChanges: boolean;
   };
 
   // Undo/redo (internal state not exposed; use canUndo/canRedo for UI)
@@ -113,6 +117,7 @@ interface AppState {
   updateNodeData: (id: string, data: any) => void;
   setProjectName: (name: string) => void;
   setCurrentFileName: (name: string | null) => void;
+  setOfflineDirty: (dirty: boolean) => void;
   loadProject: (project: any) => void;
   updateSettings: (settings: Partial<ProjectSettings>) => void;
 
@@ -142,7 +147,13 @@ interface AppState {
   setCanvasFilter: (filter: Partial<CanvasFilter>) => void;
   setConnectedSubgraphHighlight: (ids: { nodeIds: Set<string>; edgeIds: Set<string> } | null) => void;
 
-  setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync' | 'colorMapping', isOpen: boolean) => void;
+  setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync' | 'colorMapping' | 'unsavedChanges', isOpen: boolean) => void;
+  /** Force show StartupModal (e.g. from "Open new project" menu) */
+  forceShowStartupModal: boolean;
+  setForceShowStartupModal: (value: boolean) => void;
+  /** Resolver for UnsavedChangesModal: (proceed, suppress) => void */
+  unsavedChangesResolve: ((proceed: boolean, suppress: boolean) => void) | null;
+  setUnsavedChangesResolve: (fn: ((proceed: boolean, suppress: boolean) => void) | null) => void;
 
   // UI Actions
   toggleSidebar: () => void;
@@ -171,6 +182,7 @@ const defaultSettings: ProjectSettings = {
   highlightConnectedSubgraph: true,
   glassEffectEnabled: true,
   glassEffectModifier: 1.2,
+  hideUnconnectedNodes: false,
 };
 
 const defaultMeta: ProjectMeta = {
@@ -261,7 +273,7 @@ export const useStore = create<AppState>()((set, get) => ({
     const prev = _history.past[_history.past.length - 1];
     const past = _history.past.slice(0, -1);
     const future = [cloneSnapshot(nodes, edges), ..._history.future];
-    set({ nodes: prev.nodes, edges: prev.edges, _history: { past, future } });
+    set({ nodes: prev.nodes, edges: prev.edges, _history: { past, future }, offlineDirty: true });
     const changedIds = new Set<string>();
     prev.nodes.forEach((n) => changedIds.add(n.id));
     nodes.forEach((n) => changedIds.add(n.id));
@@ -277,7 +289,7 @@ export const useStore = create<AppState>()((set, get) => ({
     const next = _history.future[0];
     const past = [..._history.past, cloneSnapshot(nodes, edges)].slice(-HISTORY_LIMIT);
     const future = _history.future.slice(1);
-    set({ nodes: next.nodes, edges: next.edges, _history: { past, future } });
+    set({ nodes: next.nodes, edges: next.edges, _history: { past, future }, offlineDirty: true });
     const changedIds = new Set<string>();
     next.nodes.forEach((n) => changedIds.add(n.id));
     nodes.forEach((n) => changedIds.add(n.id));
@@ -291,6 +303,7 @@ export const useStore = create<AppState>()((set, get) => ({
   canRedo: () => get()._history.future.length > 0,
 
       currentFileName: null,
+      offlineDirty: false,
 
       // Notion state
       notionConfig: loadNotionConfig(),
@@ -341,6 +354,7 @@ export const useStore = create<AppState>()((set, get) => ({
         export: false,
         notionSync: false,
         colorMapping: false,
+        unsavedChanges: false,
       },
 
       onNodeDragStart: (_event, node) => {
@@ -454,10 +468,11 @@ export const useStore = create<AppState>()((set, get) => ({
             nodes: nodesWithTs,
             dirtyNodeIds: next,
             _dragAxisLock: nextLock,
+            offlineDirty: true,
             ...(clearStart ? { _nodeDragStartPos: null } : {}),
           });
         } else {
-          set({ nodes: newNodes });
+          set({ nodes: newNodes, offlineDirty: true });
         }
       },
 
@@ -482,9 +497,9 @@ export const useStore = create<AppState>()((set, get) => ({
           );
           const next = new Set(get().dirtyNodeIds);
           removedIds.forEach((id) => next.add(id));
-          set({ nodes: newNodes, edges: newEdges, dirtyNodeIds: next });
+          set({ nodes: newNodes, edges: newEdges, dirtyNodeIds: next, offlineDirty: true });
         } else {
-          set({ edges: newEdges });
+          set({ edges: newEdges, offlineDirty: true });
         }
       },
 
@@ -502,6 +517,7 @@ export const useStore = create<AppState>()((set, get) => ({
           nodes: newNodes,
           edges: addEdge(connection, get().edges),
           dirtyNodeIds: next,
+          offlineDirty: true,
         });
       },
 
@@ -538,7 +554,7 @@ export const useStore = create<AppState>()((set, get) => ({
           ...node,
           data: { ...node.data, localModifiedAt: nowIso() },
         };
-        set({ nodes: [...get().nodes, nodeWithTs], dirtyNodeIds: next });
+        set({ nodes: [...get().nodes, nodeWithTs], dirtyNodeIds: next, offlineDirty: true });
       },
 
       deleteNodes: (nodeIds) => {
@@ -548,6 +564,7 @@ export const useStore = create<AppState>()((set, get) => ({
           edges: get().edges.filter(
             (edge) => !nodeIds.includes(edge.source) && !nodeIds.includes(edge.target)
           ),
+          offlineDirty: true,
         });
       },
 
@@ -563,21 +580,27 @@ export const useStore = create<AppState>()((set, get) => ({
               : node
           ),
           dirtyNodeIds: next,
+          offlineDirty: true,
         });
       },
 
-      setProjectName: (name) => set({ meta: { ...get().meta, name } }),
+      setProjectName: (name) => set({ meta: { ...get().meta, name }, offlineDirty: true }),
       setCurrentFileName: (name) => set({ currentFileName: name }),
+      setOfflineDirty: (dirty) => set({ offlineDirty: dirty }),
 
       loadProject: (project) => {
         get().clearHistory();
         const loadedSettings = project.settings || {};
+        const state = get();
+        state.setSyncMode('pause');
+        state.setAllowBackgroundSync(false);
         set({
           nodes: project.nodes || [],
           edges: project.edges || [],
           meta: project.meta || defaultMeta,
           settings: { ...defaultSettings, ...loadedSettings },
           notionFieldColors: project.notionFieldColors || {},
+          offlineDirty: false,
         });
       },
 
@@ -637,7 +660,7 @@ export const useStore = create<AppState>()((set, get) => ({
         const newEdges = get().edges.map((e) =>
           e.id === edgeId ? { ...e, waypoints: wp } : e
         );
-        set({ edges: newEdges });
+        set({ edges: newEdges, offlineDirty: true });
         if (!skipSnapshot && edge) {
           const ts = nowIso();
           const ids = new Set<string>([edge.source, edge.target]);
@@ -666,7 +689,7 @@ export const useStore = create<AppState>()((set, get) => ({
         const newNodes = get().nodes.map((n) =>
           ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
         );
-        set({ edges: newEdges, nodes: newNodes, dirtyNodeIds: next });
+        set({ edges: newEdges, nodes: newNodes, dirtyNodeIds: next, offlineDirty: true });
       },
 
       removeEdgeWaypoint: (edgeId, waypointIndex) => {
@@ -684,7 +707,7 @@ export const useStore = create<AppState>()((set, get) => ({
         const newNodes = get().nodes.map((n) =>
           ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
         );
-        set({ edges: newEdges, nodes: newNodes, dirtyNodeIds: next });
+        set({ edges: newEdges, nodes: newNodes, dirtyNodeIds: next, offlineDirty: true });
       },
 
       setCanvasFilter: (filter) => {
@@ -697,6 +720,10 @@ export const useStore = create<AppState>()((set, get) => ({
       setConnectedSubgraphHighlight: (ids) => set({ connectedSubgraphHighlight: ids }),
 
       setModalOpen: (modal, isOpen) => set({ modals: { ...get().modals, [modal]: isOpen } }),
+      forceShowStartupModal: false,
+      setForceShowStartupModal: (value) => set({ forceShowStartupModal: value }),
+      unsavedChangesResolve: null,
+      setUnsavedChangesResolve: (fn) => set({ unsavedChangesResolve: fn }),
 
       // UI Actions
       toggleSidebar: () => set((state) => ({ ui: { ...state.ui, sidebarOpen: !state.ui.sidebarOpen } })),

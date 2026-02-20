@@ -34,14 +34,23 @@ export const StartupModal = () => {
   const setLastSyncTime = useStore((state) => state.setLastSyncTime);
   const settings = useStore((state) => state.settings);
   const setModalOpen = useStore((state) => state.setModalOpen);
+  const forceShowStartupModal = useStore((state) => state.forceShowStartupModal);
+  const setForceShowStartupModal = useStore((state) => state.setForceShowStartupModal);
   const { openProject } = useFileSystem();
 
   useEffect(() => {
     const hideStartup = localStorage.getItem(STORAGE_KEY) === 'true';
-    if (nodes.length === 0 && !hideStartup) {
+    if (forceShowStartupModal || (nodes.length === 0 && !hideStartup)) {
       setIsVisible(true);
+    } else {
+      setIsVisible(false);
     }
-  }, [nodes.length]);
+  }, [nodes.length, forceShowStartupModal]);
+
+  const closeModal = () => {
+    setIsVisible(false);
+    setForceShowStartupModal(false);
+  };
 
   const handleOfflineMode = async () => {
     if (dontShowAgain) {
@@ -52,7 +61,7 @@ export const StartupModal = () => {
       loadProject(result.project);
       setCurrentFileName(result.fileName);
     }
-    setIsVisible(false);
+    closeModal();
   };
 
   const handleStartBlank = () => {
@@ -60,7 +69,7 @@ export const StartupModal = () => {
       localStorage.setItem(STORAGE_KEY, 'true');
     }
     setCurrentFileName(null);
-    setIsVisible(false);
+    closeModal();
   };
 
   const lastSyncTime = useStore((state) => state.lastSyncTime);
@@ -112,10 +121,10 @@ export const StartupModal = () => {
 
         setCurrentFileName(null);
         setNotionConnected(true);
-        setSyncMode('bidirectional');
-        setAllowBackgroundSync(true);
+        setSyncMode('pause');
+        setAllowBackgroundSync(false);
         setLastSyncTime(new Date().toISOString());
-        setIsVisible(false);
+        closeModal();
       } catch (err) {
         console.error('Failed to pull from Notion:', err);
         const msg = err instanceof Error ? err.message : String(err);
@@ -124,13 +133,13 @@ export const StartupModal = () => {
         setLoading(false);
       }
     } else {
-      setIsVisible(false);
+      closeModal();
       setModalOpen('notionSync', true);
     }
   };
 
   const handleGoToNotionConfig = () => {
-    setIsVisible(false);
+    closeModal();
     setModalOpen('notionSync', true);
   };
 

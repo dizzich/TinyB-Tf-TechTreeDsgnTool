@@ -80,6 +80,14 @@ export const Toolbar = () => {
   const notionDirty = useStore((state) => state.notionDirty);
   const dirtyNodeIds = useStore((state) => state.dirtyNodeIds);
   const lastSyncError = useStore((state) => state.lastSyncError);
+  const offlineDirty = useStore((state) => state.offlineDirty);
+  const setOfflineDirty = useStore((state) => state.setOfflineDirty);
+  const setUnsavedChangesResolve = useStore((state) => state.setUnsavedChangesResolve);
+  const setNotionConfig = useStore((state) => state.setNotionConfig);
+  const setNotionConnected = useStore((state) => state.setNotionConnected);
+  const setAllowBackgroundSync = useStore((state) => state.setAllowBackgroundSync);
+  const setSyncMode = useStore((state) => state.setSyncMode);
+  const setForceShowStartupModal = useStore((state) => state.setForceShowStartupModal);
 
   const { saveProject, openProject } = useFileSystem();
   const { doPush, doPull, canSync } = useNotionSyncActions();
@@ -95,6 +103,8 @@ export const Toolbar = () => {
   const layoutMenuRef = useRef<HTMLDivElement>(null);
   const [snapMenuOpen, setSnapMenuOpen] = useState(false);
   const snapMenuRef = useRef<HTMLDivElement>(null);
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const projectMenuRef = useRef<HTMLDivElement>(null);
 
   const canvasFilter = useStore((state) => state.canvasFilter);
   const setCanvasFilter = useStore((state) => state.setCanvasFilter);
@@ -159,6 +169,16 @@ export const Toolbar = () => {
     return () => document.removeEventListener('click', close);
   }, [snapMenuOpen]);
 
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (projectMenuRef.current && !projectMenuRef.current.contains(e.target as Node)) {
+        setProjectMenuOpen(false);
+      }
+    };
+    if (projectMenuOpen) document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [projectMenuOpen]);
+
   const EDGE_TYPE_OPTIONS: { value: EdgeType; label: string; icon: typeof Spline }[] = [
     { value: 'default', label: 'Изогнутые', icon: Spline },
     { value: 'straight', label: 'Прямые', icon: Minus },
@@ -218,13 +238,66 @@ export const Toolbar = () => {
       notionFieldColors: Object.keys(notionFieldColors).length > 0 ? notionFieldColors : undefined,
     };
     await saveProject(projectData);
+    setOfflineDirty(false);
   };
 
-  const handleOpen = async () => {
+  const doOpenProject = async () => {
     const result = await openProject();
     if (result) {
       loadProject(result.project);
       setCurrentFileName(result.fileName);
+    }
+  };
+
+  const doOpenNewProject = () => {
+    setNotionConfig(null);
+    setNotionConnected(false);
+    setAllowBackgroundSync(false);
+    setSyncMode('pause');
+    loadProject({ nodes: [], edges: [] });
+    setCurrentFileName(null);
+    setForceShowStartupModal(true);
+  };
+
+  const handleOpen = async () => {
+    setProjectMenuOpen(false);
+    const hasUnsaved =
+      offlineDirty || (notionConnected && notionDirty && dirtyNodeIds.size > 0);
+    if (hasUnsaved) {
+      if (sessionStorage.getItem('techtree_suppress_unsaved_prompt') === 'true') {
+        await doOpenProject();
+      } else {
+        setUnsavedChangesResolve((proceed, suppress) => {
+          if (proceed) {
+            if (suppress) sessionStorage.setItem('techtree_suppress_unsaved_prompt', 'true');
+            doOpenProject();
+          }
+        });
+        setModalOpen('unsavedChanges', true);
+      }
+    } else {
+      await doOpenProject();
+    }
+  };
+
+  const handleOpenNewProject = () => {
+    setProjectMenuOpen(false);
+    const hasUnsaved =
+      offlineDirty || (notionConnected && notionDirty && dirtyNodeIds.size > 0);
+    if (hasUnsaved) {
+      if (sessionStorage.getItem('techtree_suppress_unsaved_prompt') === 'true') {
+        doOpenNewProject();
+      } else {
+        setUnsavedChangesResolve((proceed, suppress) => {
+          if (proceed) {
+            if (suppress) sessionStorage.setItem('techtree_suppress_unsaved_prompt', 'true');
+            doOpenNewProject();
+          }
+        });
+        setModalOpen('unsavedChanges', true);
+      }
+    } else {
+      doOpenNewProject();
     }
   };
 
@@ -259,24 +332,55 @@ export const Toolbar = () => {
       }}
     >
       <div className="flex items-center gap-1">
-        <div
-          className="font-bold text-text mr-3 text-sm tracking-tight flex items-center gap-1.5 min-w-0 max-w-[200px] sm:max-w-[280px]"
-          title={
-            notionConfig && notionConnected && notionConfig.databaseTitle
-              ? notionConfig.databaseTitle
-              : currentFileName || meta.name || 'Без названия'
-          }
-        >
-          {notionConfig && notionConnected && notionConfig.databaseTitle ? (
-            <>
-              <NotionIcon size={16} className="shrink-0" color="currentColor" docFill="transparent" />
-              <span className="truncate">{notionConfig.databaseTitle}</span>
-            </>
-          ) : (
-            <>
-              <FileJson size={16} className="shrink-0 text-muted" strokeWidth={1.75} />
-              <span className="truncate">{currentFileName || meta.name || 'Без названия'}</span>
-            </>
+        <div className="relative mr-3" ref={projectMenuRef}>
+          <button
+            type="button"
+            onClick={() => setProjectMenuOpen((o) => !o)}
+            className="font-bold text-text text-sm tracking-tight flex items-center gap-1.5 min-w-0 max-w-[200px] sm:max-w-[280px] cursor-pointer hover:text-accent transition-colors rounded-control px-1 py-0.5 -ml-1"
+            title={
+              notionConfig && notionConnected && notionConfig.databaseTitle
+                ? notionConfig.databaseTitle
+                : currentFileName || meta.name || 'Без названия'
+            }
+          >
+            {notionConfig && notionConnected && notionConfig.databaseTitle ? (
+              <>
+                <NotionIcon size={16} className="shrink-0" color="currentColor" docFill="transparent" />
+                <span className="truncate">{notionConfig.databaseTitle}</span>
+                <ChevronDown
+                  size={12}
+                  strokeWidth={1.75}
+                  className={`shrink-0 transition-transform ${projectMenuOpen ? 'rotate-180' : ''}`}
+                />
+              </>
+            ) : (
+              <>
+                <FileJson size={16} className="shrink-0 text-muted" strokeWidth={1.75} />
+                <span className="truncate">{currentFileName || meta.name || 'Без названия'}</span>
+                <ChevronDown
+                  size={12}
+                  strokeWidth={1.75}
+                  className={`shrink-0 transition-transform ${projectMenuOpen ? 'rotate-180' : ''}`}
+                />
+              </>
+            )}
+          </button>
+          {projectMenuOpen && (
+            <div
+              className="absolute top-full left-0 mt-1 py-1 min-w-[180px] rounded-control border border-panel-border bg-panel shadow-floating z-50"
+              role="menu"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleOpenNewProject}
+                className={menuItemClass()}
+              >
+                <FolderOpen size={16} strokeWidth={1.75} />
+                Открыть проект
+              </button>
+            </div>
           )}
         </div>
 

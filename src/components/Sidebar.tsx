@@ -3,13 +3,14 @@ import { useStore } from '../store/useStore';
 import { Search, Filter, ChevronLeft } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
 import { FilterBuilder } from './FilterBuilder';
-import { nodeMatchesRules, buildUniqueValuesMap } from '../utils/filterUtils';
+import { nodeMatchesRules, buildUniqueValuesMap, getConnectedNodeIds } from '../utils/filterUtils';
 import type { FilterRule } from '../types';
 
 const BASE_GLASS_BLUR = 20;
 
 export const Sidebar = () => {
   const nodes = useStore((state) => state.nodes);
+  const edges = useStore((state) => state.edges);
   const setNodes = useStore((state) => state.setNodes);
   const toggleSidebar = useStore((state) => state.toggleSidebar);
   const settings = useStore((state) => state.settings);
@@ -21,9 +22,11 @@ export const Sidebar = () => {
   const reactFlowInstance = useReactFlow();
 
   const uniqueValues = useMemo(() => buildUniqueValuesMap(nodes), [nodes]);
+  const connectedNodeIds = useMemo(() => getConnectedNodeIds(edges), [edges]);
 
   const filteredNodes = useMemo(() => {
     let result = nodes.filter((n) => {
+      if (settings.hideUnconnectedNodes === true && !connectedNodeIds.has(n.id)) return false;
       const label = n.data?.label || n.id;
       const matchesSearch = label.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesRules = nodeMatchesRules(n, filterRules);
@@ -52,7 +55,7 @@ export const Sidebar = () => {
     });
 
     return result;
-  }, [nodes, searchTerm, filterRules, sortBy]);
+  }, [nodes, searchTerm, filterRules, sortBy, settings.hideUnconnectedNodes, connectedNodeIds]);
 
   const handleNodeClick = (nodeId: string) => {
     const updatedNodes = nodes.map((n) => ({

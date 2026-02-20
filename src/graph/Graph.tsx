@@ -6,7 +6,7 @@ import { useStore } from '../store/useStore';
 import TechNode from './TechNode';
 import EditableEdge from './EditableEdge';
 import { AxisLockGuide } from './AxisLockGuide';
-import { nodeMatchesRules } from '../utils/filterUtils';
+import { nodeMatchesRules, getConnectedNodeIds } from '../utils/filterUtils';
 import type { TechNode as TechNodeType, CanvasFilter } from '../types';
 
 function matchesCanvasFilter(node: TechNodeType, filter: CanvasFilter): boolean {
@@ -46,6 +46,7 @@ export const Graph = () => {
   const edgeAnimated = useStore((state) => state.settings.edgeAnimated) ?? false;
   const manualEdgeMode = useStore((state) => state.settings.manualEdgeMode) ?? false;
   const highlightConnectedSubgraph = useStore((state) => state.settings.highlightConnectedSubgraph ?? true);
+  const hideUnconnectedNodes = useStore((state) => state.settings.hideUnconnectedNodes === true);
   const canvasFilter = useStore((state) => state.canvasFilter);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,10 +54,15 @@ export const Graph = () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const edgeTypes = useMemo(() => ({ editableEdge: EditableEdge as any }), []);
 
-  // Apply canvas filter and/or edge-click highlight to nodes
+  // Apply hideUnconnectedNodes, canvas filter, and/or edge-click highlight to nodes
   const { processedNodes, matchedNodeIds } = useMemo(() => {
     let baseNodes = nodes;
     let matchedNodeIds: Set<string> | null = null;
+
+    if (hideUnconnectedNodes) {
+      const connectedIds = getConnectedNodeIds(edges);
+      baseNodes = baseNodes.filter((node) => connectedIds.has(node.id));
+    }
 
     if (canvasFilter.enabled) {
       if (canvasFilter.hideMode === 'hide') {
@@ -89,7 +95,7 @@ export const Graph = () => {
     }
 
     return { processedNodes: baseNodes, matchedNodeIds };
-  }, [nodes, canvasFilter, connectedSubgraphHighlight]);
+  }, [nodes, edges, hideUnconnectedNodes, canvasFilter, connectedSubgraphHighlight]);
 
   // Apply edgeType + style overrides + canvas filter + edge-click highlight to edges.
   const processedEdges = useMemo(() => {
@@ -111,29 +117,29 @@ export const Graph = () => {
         : {}),
     }));
 
+    if (hideUnconnectedNodes || (canvasFilter.enabled && canvasFilter.hideMode === 'hide')) {
+      const visibleNodeIds = new Set(processedNodes.map((n) => n.id));
+      result = result.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
+    }
+
     if (connectedSubgraphHighlight) {
       const { edgeIds } = connectedSubgraphHighlight;
       result = result.map((e) => ({
         ...e,
         className: edgeIds.has(e.id) ? 'edge-highlight-match-edge' : 'edge-highlight-dim-edge',
       }));
-    } else if (canvasFilter.enabled) {
-      if (canvasFilter.hideMode === 'hide') {
-        const visibleNodeIds = new Set(processedNodes.map((n) => n.id));
-        result = result.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
-      } else if (matchedNodeIds) {
-        result = result.map((e) => {
-          const bothMatch = matchedNodeIds.has(e.source) && matchedNodeIds.has(e.target);
-          return {
-            ...e,
-            className: bothMatch ? undefined : 'canvas-filter-dim-edge',
-          };
-        });
-      }
+    } else if (canvasFilter.enabled && canvasFilter.hideMode !== 'hide' && matchedNodeIds) {
+      result = result.map((e) => {
+        const bothMatch = matchedNodeIds.has(e.source) && matchedNodeIds.has(e.target);
+        return {
+          ...e,
+          className: bothMatch ? undefined : 'canvas-filter-dim-edge',
+        };
+      });
     }
 
     return result;
-  }, [edges, edgeType, edgeStrokeWidth, edgeAnimated, manualEdgeMode, processedNodes, matchedNodeIds, canvasFilter, connectedSubgraphHighlight]);
+  }, [edges, edgeType, edgeStrokeWidth, edgeAnimated, manualEdgeMode, processedNodes, matchedNodeIds, canvasFilter, connectedSubgraphHighlight, hideUnconnectedNodes]);
 
   const setEdges = useStore((s) => s.setEdges);
 

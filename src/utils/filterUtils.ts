@@ -1,4 +1,14 @@
-import type { TechNode, FilterRule, FilterProperty } from '../types';
+import type { TechNode, TechEdge, FilterRule, FilterProperty } from '../types';
+
+/** Returns Set of node IDs that have at least one edge (as source or target). */
+export function getConnectedNodeIds(edges: TechEdge[]): Set<string> {
+  const ids = new Set<string>();
+  for (const e of edges) {
+    ids.add(e.source);
+    ids.add(e.target);
+  }
+  return ids;
+}
 
 function getPropertyValue(node: TechNode, property: FilterProperty): string {
   if (property === 'openConditionRefs') {

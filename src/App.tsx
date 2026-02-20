@@ -11,6 +11,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ColorMappingModal } from './components/ColorMappingModal';
 import { StartupModal } from './components/StartupModal';
 import { NotionSyncModal } from './components/NotionSyncModal';
+import { UnsavedChangesModal } from './components/UnsavedChangesModal';
 import { StatusBar } from './components/StatusBar';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useNotionAutoSave } from './hooks/useNotionAutoSave';
@@ -132,6 +133,7 @@ function App() {
       <ColorMappingModal />
       <StartupModal />
       <NotionSyncModal />
+      <UnsavedChangesModal />
     </ReactFlowProvider>
   );
 }

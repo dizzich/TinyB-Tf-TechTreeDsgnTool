@@ -145,6 +145,26 @@ export const SettingsModal = () => {
                   </label>
                 </div>
               </div>
+
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer text-text hover:text-accent transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={localSettings.hideUnconnectedNodes === true}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        hideUnconnectedNodes: e.target.checked,
+                      })
+                    }
+                    className="w-4 h-4 border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
+                  />
+                  <span>Скрывать неподключённые узлы</span>
+                </label>
+                <p className="text-xs text-muted mt-1 ml-6">
+                  Не показывать в списке и на полотне узлы без входящих и исходящих связей
+                </p>
+              </div>
             </div>
           )}
 

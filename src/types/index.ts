@@ -262,6 +262,8 @@ export interface ProjectSettings {
   glassEffectEnabled?: boolean;
   /** Множитель интенсивности эффекта стекла (0.5–2.5), 1.2 = +20%. Default 1.2. */
   glassEffectModifier?: number;
+  /** Скрывать узлы без входящих и исходящих связей в списке и на полотне. Default false. */
+  hideUnconnectedNodes?: boolean;
 }
 
 /** Filter property — all node data fields usable for filtering */

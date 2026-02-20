@@ -49,19 +49,42 @@ export const useKeyboardShortcuts = () => {
           edges,
           notionFieldColors: Object.keys(notionFieldColors).length > 0 ? notionFieldColors : undefined,
         };
-        saveProject(projectData);
+        saveProject(projectData).then(() => {
+          useStore.getState().setOfflineDirty(false);
+        });
         return;
       }
 
       // Ctrl/Cmd + O: Open
       if (modifier && code === 'KeyO') {
         event.preventDefault();
-        openProject().then((result) => {
-          if (result) {
-            loadProject(result.project);
-            setCurrentFileName(result.fileName);
+        const state = useStore.getState();
+        const hasUnsaved =
+          state.offlineDirty ||
+          (state.notionConnected && state.notionDirty && state.dirtyNodeIds.size > 0);
+        const doOpen = () => {
+          openProject().then((result) => {
+            if (result) {
+              loadProject(result.project);
+              setCurrentFileName(result.fileName);
+            }
+          });
+        };
+        if (hasUnsaved) {
+          if (sessionStorage.getItem('techtree_suppress_unsaved_prompt') === 'true') {
+            doOpen();
+          } else {
+            state.setUnsavedChangesResolve((proceed, suppress) => {
+              if (proceed) {
+                if (suppress) sessionStorage.setItem('techtree_suppress_unsaved_prompt', 'true');
+                doOpen();
+              }
+            });
+            state.setModalOpen('unsavedChanges', true);
           }
-        });
+        } else {
+          doOpen();
+        }
         return;
       }
 
