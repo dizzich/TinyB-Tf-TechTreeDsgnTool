@@ -28,6 +28,7 @@ import {
   ArrowUpDown,
   PenTool,
   Grid3X3,
+  FileJson,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { getLayoutedElements, layoutSubgraph } from '../utils/autoLayout';
@@ -50,6 +51,7 @@ import { ProjectFile, EdgeType, TechNode } from '../types';
 import { COLOR_BY_OPTIONS } from './ColorMappingModal';
 import { FilterBuilder } from './FilterBuilder';
 import { buildUniqueValuesMap } from '../utils/filterUtils';
+import { NotionIcon } from './NotionIcon';
 
 export const Toolbar = () => {
   const nodes = useStore((state) => state.nodes);
@@ -62,7 +64,10 @@ export const Toolbar = () => {
   const setEdges = useStore((state) => state.setEdges);
   const addNode = useStore((state) => state.addNode);
   const loadProject = useStore((state) => state.loadProject);
+  const setCurrentFileName = useStore((state) => state.setCurrentFileName);
   const setModalOpen = useStore((state) => state.setModalOpen);
+  const currentFileName = useStore((state) => state.currentFileName);
+  const notionConnected = useStore((state) => state.notionConnected);
   const updateSettings = useStore((state) => state.updateSettings);
   const _pushSnapshot = useStore((state) => state._pushSnapshot);
   const canUndo = useStore((state) => state._history.past.length > 0);
@@ -216,9 +221,10 @@ export const Toolbar = () => {
   };
 
   const handleOpen = async () => {
-    const project = await openProject();
-    if (project) {
-      loadProject(project);
+    const result = await openProject();
+    if (result) {
+      loadProject(result.project);
+      setCurrentFileName(result.fileName);
     }
   };
 
@@ -253,7 +259,26 @@ export const Toolbar = () => {
       }}
     >
       <div className="flex items-center gap-1">
-        <span className="font-bold text-text mr-3 text-sm tracking-tight">TechTree Studio</span>
+        <div
+          className="font-bold text-text mr-3 text-sm tracking-tight flex items-center gap-1.5 min-w-0 max-w-[200px] sm:max-w-[280px]"
+          title={
+            notionConfig && notionConnected && notionConfig.databaseTitle
+              ? notionConfig.databaseTitle
+              : currentFileName || meta.name || 'Без названия'
+          }
+        >
+          {notionConfig && notionConnected && notionConfig.databaseTitle ? (
+            <>
+              <NotionIcon size={16} className="shrink-0" color="currentColor" docFill="transparent" />
+              <span className="truncate">{notionConfig.databaseTitle}</span>
+            </>
+          ) : (
+            <>
+              <FileJson size={16} className="shrink-0 text-muted" strokeWidth={1.75} />
+              <span className="truncate">{currentFileName || meta.name || 'Без названия'}</span>
+            </>
+          )}
+        </div>
 
         <button
           type="button"
@@ -564,7 +589,16 @@ export const Toolbar = () => {
                 </label>
               </div>
               <div className="my-1 border-t border-panel-border" />
-              <div className="px-3 py-2">
+              <div className="px-3 py-2 space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-text hover:text-accent transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={settings.highlightConnectedSubgraph ?? true}
+                    onChange={(e) => updateSettings({ highlightConnectedSubgraph: e.target.checked })}
+                    className="w-3.5 h-3.5 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
+                  />
+                  Подсветка связанных при клике
+                </label>
                 <label className="flex items-center gap-2 cursor-pointer text-xs text-text hover:text-accent transition-colors">
                   <input
                     type="checkbox"

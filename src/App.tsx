@@ -46,8 +46,8 @@ function App() {
         id="app"
         className="relative flex h-screen w-screen overflow-hidden text-text bg-bg transition-all duration-300 ease-in-out"
       >
-        {/* Main row: workspace + inspector (when open) so graph never goes under inspector */}
-        <div className="flex flex-1 min-w-0 min-h-0">
+        {/* Main row: workspace full width, inspector overlays on the right for glass effect */}
+        <div className="flex flex-1 min-w-0 min-h-0 relative">
           <div className="workspace flex-1 min-w-0 flex flex-col bg-workspace-bg relative z-0">
             {!sidebarOpen && (
               <button
@@ -76,7 +76,7 @@ function App() {
           </div>
 
           {inspectorOpen && (
-            <div className="inspector-wrap w-80 shrink-0 flex flex-col min-h-0">
+            <div className="inspector-wrap absolute right-0 top-0 bottom-0 w-80 z-30 flex flex-col min-h-0 shadow-panel" style={{ backgroundColor: 'transparent' }}>
               <Inspector />
             </div>
           )}

@@ -19,6 +19,7 @@ const CLICK_MAX_DIST_PX = 8;
 const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected?: boolean; id?: string }) => {
   const isHighlighted = selected || data?.edgeHighlighted;
   const edges = useStore((state) => state.edges);
+  const highlightConnectedSubgraph = useStore((state) => state.settings.highlightConnectedSubgraph ?? true);
   const setConnectedSubgraphHighlight = useStore((state) => state.setConnectedSubgraphHighlight);
   const pointerDownRef = useRef<{ x: number; y: number; time: number; type: 'source' | 'target' } | null>(null);
   const pointerUpHandlerRef = useRef<((e: PointerEvent) => void) | null>(null);
@@ -35,7 +36,7 @@ const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected
         const dt = Date.now() - down.time;
         const dx = e.clientX - down.x;
         const dy = e.clientY - down.y;
-        if (dt < CLICK_MAX_MS && dx * dx + dy * dy < CLICK_MAX_DIST_PX * CLICK_MAX_DIST_PX) {
+        if (dt < CLICK_MAX_MS && dx * dx + dy * dy < CLICK_MAX_DIST_PX * CLICK_MAX_DIST_PX && highlightConnectedSubgraph) {
           if (type === 'target') {
             const incoming = edges.filter((edge) => edge.target === id);
             const edgeIds = new Set(incoming.map((edge) => edge.id));
@@ -52,7 +53,7 @@ const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected
       pointerUpHandlerRef.current = up;
       document.addEventListener('pointerup', up);
     },
-    [id, edges, setConnectedSubgraphHighlight]
+    [id, edges, highlightConnectedSubgraph, setConnectedSubgraphHighlight]
   );
 
   useEffect(() => {

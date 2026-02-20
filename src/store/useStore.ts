@@ -33,6 +33,9 @@ interface AppState {
   meta: ProjectMeta;
   settings: ProjectSettings;
 
+  /** Name of the currently opened local file (from File System API), or null */
+  currentFileName: string | null;
+
   // Notion sync state
   notionConfig: NotionConfig | null;
   notionCorsProxy: string;
@@ -109,6 +112,7 @@ interface AppState {
   deleteNodes: (nodeIds: string[]) => void;
   updateNodeData: (id: string, data: any) => void;
   setProjectName: (name: string) => void;
+  setCurrentFileName: (name: string | null) => void;
   loadProject: (project: any) => void;
   updateSettings: (settings: Partial<ProjectSettings>) => void;
 
@@ -164,6 +168,9 @@ const defaultSettings: ProjectSettings = {
   snapEnabled: true,
   snapGridSize: 8,
   snapToObjects: false,
+  highlightConnectedSubgraph: true,
+  glassEffectEnabled: true,
+  glassEffectModifier: 1.2,
 };
 
 const defaultMeta: ProjectMeta = {
@@ -282,6 +289,8 @@ export const useStore = create<AppState>()((set, get) => ({
 
   canUndo: () => get()._history.past.length > 0,
   canRedo: () => get()._history.future.length > 0,
+
+      currentFileName: null,
 
       // Notion state
       notionConfig: loadNotionConfig(),
@@ -558,6 +567,7 @@ export const useStore = create<AppState>()((set, get) => ({
       },
 
       setProjectName: (name) => set({ meta: { ...get().meta, name } }),
+      setCurrentFileName: (name) => set({ currentFileName: name }),
 
       loadProject: (project) => {
         get().clearHistory();

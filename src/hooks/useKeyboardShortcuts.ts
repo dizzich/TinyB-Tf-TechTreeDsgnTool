@@ -12,6 +12,7 @@ export const useKeyboardShortcuts = () => {
   const settings = useStore((state) => state.settings);
   const notionFieldColors = useStore((state) => state.notionFieldColors);
   const loadProject = useStore((state) => state.loadProject);
+  const setCurrentFileName = useStore((state) => state.setCurrentFileName);
   const setNodes = useStore((state) => state.setNodes);
   const modals = useStore((state) => state.modals);
   const canvasFilter = useStore((state) => state.canvasFilter);
@@ -55,9 +56,10 @@ export const useKeyboardShortcuts = () => {
       // Ctrl/Cmd + O: Open
       if (modifier && code === 'KeyO') {
         event.preventDefault();
-        openProject().then((project) => {
-          if (project) {
-            loadProject(project);
+        openProject().then((result) => {
+          if (result) {
+            loadProject(result.project);
+            setCurrentFileName(result.fileName);
           }
         });
         return;
@@ -122,6 +124,7 @@ export const useKeyboardShortcuts = () => {
     saveProject,
     openProject,
     loadProject,
+    setCurrentFileName,
     setNodes,
     setShiftKeyPressed,
   ]);

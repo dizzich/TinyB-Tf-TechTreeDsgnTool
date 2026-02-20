@@ -6,10 +6,13 @@ import { FilterBuilder } from './FilterBuilder';
 import { nodeMatchesRules, buildUniqueValuesMap } from '../utils/filterUtils';
 import type { FilterRule } from '../types';
 
+const BASE_GLASS_BLUR = 20;
+
 export const Sidebar = () => {
   const nodes = useStore((state) => state.nodes);
   const setNodes = useStore((state) => state.setNodes);
   const toggleSidebar = useStore((state) => state.toggleSidebar);
+  const settings = useStore((state) => state.settings);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'act' | 'stage' | 'order'>('order');
@@ -69,17 +72,39 @@ export const Sidebar = () => {
 
   const activeFilterCount = filterRules.length;
 
+  const glassEnabled = settings.glassEffectEnabled !== false;
+  const modifier = Math.max(0.5, Math.min(2.5, settings.glassEffectModifier ?? 1.2));
+  const blurPx = Math.round(BASE_GLASS_BLUR * (3 - modifier));
+  const glassStyle = glassEnabled
+    ? {
+        backdropFilter: `blur(${blurPx}px)`,
+        WebkitBackdropFilter: `blur(${blurPx}px)`,
+        transform: 'translateZ(0)',
+        isolation: 'isolate' as const,
+      }
+    : { backdropFilter: 'none', WebkitBackdropFilter: 'none' };
+
   return (
     <aside 
       className="sidebar flex flex-col h-full border-r border-panel-border p-4 gap-3 overflow-hidden transition-all w-[var(--sidebar-width)]"
       style={{
-        backgroundColor: 'color-mix(in srgb, var(--panel) 65%, transparent)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        backgroundColor: glassEnabled
+          ? 'color-mix(in srgb, var(--panel) 48%, transparent)'
+          : 'color-mix(in srgb, var(--panel) 65%, transparent)',
+        ...glassStyle,
       }}
     >
       <header className="sidebar__header shrink-0 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-text">Узлы</h1>
+        <h1 className="text-lg font-semibold text-text">
+          Узлы
+          {nodes.length > 0 && (
+            <span className="ml-1.5 font-normal text-muted text-sm">
+              {filteredNodes.length === nodes.length
+                ? `(${nodes.length})`
+                : `(${filteredNodes.length} из ${nodes.length})`}
+            </span>
+          )}
+        </h1>
         <button
           onClick={toggleSidebar}
           className="p-1 text-muted hover:text-text hover:bg-control-hover-bg rounded-md transition-colors"

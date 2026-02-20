@@ -38,7 +38,7 @@ export const useFileSystem = () => {
     saveAs(blob, `${projectData.meta.name || 'project'}.json`);
   }, [fileHandle]);
 
-  const openProject = useCallback(async (): Promise<ProjectFile | null> => {
+  const openProject = useCallback(async (): Promise<{ project: ProjectFile; fileName: string | null } | null> => {
     // Try Native File System API
     if ('showOpenFilePicker' in window) {
       try {
@@ -49,42 +49,41 @@ export const useFileSystem = () => {
           }],
           multiple: false,
         });
-        
+
         setFileHandle(handle);
         const file = await handle.getFile();
         const text = await file.text();
-        return JSON.parse(text) as ProjectFile;
+        const project = JSON.parse(text) as ProjectFile;
+        return { project, fileName: handle.name ?? null };
       } catch (err: any) {
-         if (err.name !== 'AbortError') {
-            console.error("File Open Error:", err);
-         }
-         return null;
+        if (err.name !== 'AbortError') {
+          console.error('File Open Error:', err);
+        }
+        return null;
       }
     }
 
-    // Fallback: This usually requires an input element click.
-    // We can programmatically click a hidden input, or just return null and let caller handle fallback UI.
-    // Ideally, for fallback, we need to create an input element dynamically.
-    
+    // Fallback: input element
     return new Promise((resolve) => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json';
-        input.onchange = async (e: any) => {
-            const file = e.target.files[0];
-            if (file) {
-                const text = await file.text();
-                try {
-                    resolve(JSON.parse(text));
-                } catch (e) {
-                    console.error("JSON Parse Error", e);
-                    resolve(null);
-                }
-            } else {
-                resolve(null);
-            }
-        };
-        input.click();
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = async (e: any) => {
+        const file = e.target.files[0];
+        if (file) {
+          const text = await file.text();
+          try {
+            const project = JSON.parse(text) as ProjectFile;
+            resolve({ project, fileName: file.name ?? null });
+          } catch (err) {
+            console.error('JSON Parse Error', err);
+            resolve(null);
+          }
+        } else {
+          resolve(null);
+        }
+      };
+      input.click();
     });
   }, []);
 

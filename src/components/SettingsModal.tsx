@@ -188,6 +188,45 @@ export const SettingsModal = () => {
                   </button>
                 </div>
               </div>
+
+              <div className="border-t border-panel-border pt-4">
+                <h3 className="text-sm font-medium text-text mb-3">Эффект стекла</h3>
+                <label className="flex items-center gap-2 cursor-pointer text-text hover:text-accent transition-colors mb-3">
+                  <input
+                    type="checkbox"
+                    checked={localSettings.glassEffectEnabled !== false}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        glassEffectEnabled: e.target.checked,
+                      })
+                    }
+                    className="w-4 h-4 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
+                  />
+                  <span>Включить эффект стекла на панелях Узлы и Инспектор</span>
+                </label>
+                <div className={localSettings.glassEffectEnabled === false ? 'opacity-60 pointer-events-none' : ''}>
+                  <label className={labelClass}>
+                    Интенсивность эффекта ({(localSettings.glassEffectModifier ?? 1.2) * 100}%)
+                  </label>
+                  <input
+                    type="range"
+                    min={50}
+                    max={250}
+                    step={10}
+                    value={((localSettings.glassEffectModifier ?? 1.2) * 100)}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        glassEffectModifier: parseInt(e.target.value, 10) / 100,
+                      })
+                    }
+                    disabled={localSettings.glassEffectEnabled === false}
+                    className="w-full h-2 bg-control-bg-muted rounded-full appearance-none cursor-pointer accent-accent disabled:cursor-not-allowed"
+                  />
+                  <p className="mt-1 text-xs text-muted">50% — сильнее, 250% — слабее. По умолчанию 120%.</p>
+                </div>
+              </div>
             </div>
           )}
 

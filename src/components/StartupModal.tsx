@@ -25,6 +25,7 @@ export const StartupModal = () => {
   const [error, setError] = useState('');
   const nodes = useStore((state) => state.nodes);
   const loadProject = useStore((state) => state.loadProject);
+  const setCurrentFileName = useStore((state) => state.setCurrentFileName);
   const notionConfig = useStore((state) => state.notionConfig);
   const replaceNodesAndEdgesForSync = useStore((state) => state.replaceNodesAndEdgesForSync);
   const setNotionConnected = useStore((state) => state.setNotionConnected);
@@ -46,9 +47,10 @@ export const StartupModal = () => {
     if (dontShowAgain) {
       localStorage.setItem(STORAGE_KEY, 'true');
     }
-    const project = await openProject();
-    if (project) {
-      loadProject(project);
+    const result = await openProject();
+    if (result) {
+      loadProject(result.project);
+      setCurrentFileName(result.fileName);
     }
     setIsVisible(false);
   };
@@ -57,6 +59,7 @@ export const StartupModal = () => {
     if (dontShowAgain) {
       localStorage.setItem(STORAGE_KEY, 'true');
     }
+    setCurrentFileName(null);
     setIsVisible(false);
   };
 
@@ -107,6 +110,7 @@ export const StartupModal = () => {
           : getLayoutedElements(pulledNodes, pulledEdges, settings.layoutDirection);
         replaceNodesAndEdgesForSync(toSet.nodes, toSet.edges, notionFieldColors, replaceColors);
 
+        setCurrentFileName(null);
         setNotionConnected(true);
         setSyncMode('bidirectional');
         setAllowBackgroundSync(true);

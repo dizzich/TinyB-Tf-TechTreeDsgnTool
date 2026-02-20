@@ -7,6 +7,7 @@ import { getNotionPageUrl } from '../utils/notionUrl';
 import { NotionIcon } from './NotionIcon';
 
 const labelClass = 'block text-xs font-medium text-muted mb-1.5';
+const BASE_GLASS_BLUR = 20;
 const inputClass =
   'w-full border border-control-border rounded-control px-2.5 py-1.5 text-sm bg-control-bg text-text placeholder:text-muted focus:outline-none focus:border-accent transition-colors';
 
@@ -170,6 +171,18 @@ export const Inspector = () => {
   const incomingEdges = selectedNode ? edges.filter((e) => e.target === selectedNode.id) : [];
   const outgoingEdges = selectedNode ? edges.filter((e) => e.source === selectedNode.id) : [];
 
+  const glassEnabled = settings.glassEffectEnabled !== false;
+  const modifier = Math.max(0.5, Math.min(2.5, settings.glassEffectModifier ?? 1.2));
+  const blurPx = Math.round(BASE_GLASS_BLUR * (3 - modifier));
+  const glassStyle = glassEnabled
+    ? {
+        backdropFilter: `blur(${blurPx}px)`,
+        WebkitBackdropFilter: `blur(${blurPx}px)`,
+        transform: 'translateZ(0)',
+        isolation: 'isolate' as const,
+      }
+    : { backdropFilter: 'none', WebkitBackdropFilter: 'none' };
+
   const handleChange = (key: string, value: any) => {
     if (selectedNode) updateNodeData(selectedNode.id, { [key]: value });
   };
@@ -226,11 +239,12 @@ export const Inspector = () => {
   if (!selectedNode) {
     return (
       <aside
-        className="inspector w-80 shrink-0 flex flex-col h-full border-l border-panel-border p-4 transition-all"
+        className="inspector w-80 shrink-0 flex flex-col h-full border-l border-panel-border p-4 transition-all overflow-y-auto"
         style={{
-          backgroundColor: 'color-mix(in srgb, var(--panel) 65%, transparent)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
+          backgroundColor: glassEnabled
+            ? 'color-mix(in srgb, var(--panel) 48%, transparent)'
+            : 'color-mix(in srgb, var(--panel) 65%, transparent)',
+          ...glassStyle,
         }}
       >
         <header className="inspector__header shrink-0 flex justify-between items-center mb-4">
@@ -259,11 +273,12 @@ export const Inspector = () => {
 
   return (
     <aside
-      className="inspector w-80 shrink-0 flex flex-col h-full border-l border-panel-border shadow-panel z-10 overflow-hidden transition-all"
+      className="inspector w-80 shrink-0 flex flex-col h-full border-l border-panel-border shadow-panel z-10 min-h-0 transition-all"
       style={{
-        backgroundColor: 'color-mix(in srgb, var(--panel) 65%, transparent)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        backgroundColor: glassEnabled
+          ? 'color-mix(in srgb, var(--panel) 48%, transparent)'
+          : 'color-mix(in srgb, var(--panel) 65%, transparent)',
+        ...glassStyle,
       }}
     >
       <header

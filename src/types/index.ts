@@ -125,6 +125,8 @@ export interface TechEdge {
 export interface NotionConfig {
   apiKey: string;
   databaseId: string;
+  /** Display name of the Notion database (from API) */
+  databaseTitle?: string;
   /** Column mapping for the connected database */
   columnMapping: NotionColumnMapping;
 }
@@ -254,6 +256,12 @@ export interface ProjectSettings {
   snapGridSize?: number;
   /** Snap to neighboring nodes (align edges/centers when close). Default false. */
   snapToObjects?: boolean;
+  /** Подсветка связанных нод/линий при клике. Default true. */
+  highlightConnectedSubgraph?: boolean;
+  /** Эффект стекла (blur) на панелях Узлы и Инспектор. Default true. */
+  glassEffectEnabled?: boolean;
+  /** Множитель интенсивности эффекта стекла (0.5–2.5), 1.2 = +20%. Default 1.2. */
+  glassEffectModifier?: number;
 }
 
 /** Filter property — all node data fields usable for filtering */

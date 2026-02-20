@@ -45,6 +45,7 @@ export const Graph = () => {
   const edgeStrokeWidth = useStore((state) => state.settings.edgeStrokeWidth) ?? 2;
   const edgeAnimated = useStore((state) => state.settings.edgeAnimated) ?? false;
   const manualEdgeMode = useStore((state) => state.settings.manualEdgeMode) ?? false;
+  const highlightConnectedSubgraph = useStore((state) => state.settings.highlightConnectedSubgraph ?? true);
   const canvasFilter = useStore((state) => state.canvasFilter);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -139,19 +140,19 @@ export const Graph = () => {
   const handleEdgeClick = useCallback(
     (_: React.MouseEvent, edge: { id: string; source: string; target: string }) => {
       if (manualEdgeMode) {
-        // Explicitly select this edge for waypoint editing
         const next = edges.map((e) => ({
           ...e,
           selected: e.id === edge.id,
         }));
         setEdges(next);
-        return;
       }
-      const nodeIds = new Set<string>([edge.source, edge.target]);
-      const edgeIds = new Set<string>([edge.id]);
-      setConnectedSubgraphHighlight({ nodeIds, edgeIds });
+      if (highlightConnectedSubgraph) {
+        const nodeIds = new Set<string>([edge.source, edge.target]);
+        const edgeIds = new Set<string>([edge.id]);
+        setConnectedSubgraphHighlight({ nodeIds, edgeIds });
+      }
     },
-    [manualEdgeMode, setConnectedSubgraphHighlight, edges, setEdges]
+    [manualEdgeMode, highlightConnectedSubgraph, setConnectedSubgraphHighlight, edges, setEdges]
   );
 
   const clearHighlight = useCallback(() => {

@@ -75,7 +75,7 @@ export const NotionSyncModal = () => {
     notionConfig?.columnMapping || { ...DEFAULT_COLUMN_MAPPING }
   );
   const [dbProperties, setDbProperties] = useState<string[]>([]);
-  const [dbTitle, setDbTitle] = useState('');
+  const [dbTitle, setDbTitle] = useState(notionConfig?.databaseTitle || '');
 
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState('');
@@ -96,10 +96,11 @@ export const NotionSyncModal = () => {
       const baseMapping = notionConfig?.columnMapping ?? {};
       const migrated = migrateColumnMapping(baseMapping);
       setMapping(notionConfig?.columnMapping ? { ...DEFAULT_COLUMN_MAPPING, ...migrated } : { ...DEFAULT_COLUMN_MAPPING });
+      setDbTitle(notionConfig?.databaseTitle || '');
       setSyncLog([]);
       setSyncResult(null);
     }
-  }, [isOpen]);
+  }, [isOpen, notionConfig]);
 
   const getEffectiveProxy = (): string | undefined => {
     if (corsProxy === NOTION_BUILTIN_PROXY) return NOTION_BUILTIN_PROXY;
@@ -151,6 +152,7 @@ export const NotionSyncModal = () => {
     const config: NotionConfig = {
       apiKey,
       databaseId,
+      databaseTitle: dbTitle || undefined,
       columnMapping: mapping,
     };
     setNotionConfig(config);
