@@ -5,16 +5,28 @@ import { NotionConfig, NotionColumnMapping } from '../types';
 import { testNotionConnection, pullFromNotion, pullFromNotionIncremental, pushToNotion, bidirectionalSync, checkForNotionUpdates, NOTION_BUILTIN_PROXY } from '../utils/notionApi';
 import { getLayoutedElements } from '../utils/autoLayout';
 
+/** Migrate old actAndStage+actStage to act + stage */
+function migrateColumnMapping(old: Record<string, string>): Record<string, string> {
+  const { actAndStage, actStage, ...rest } = old as Record<string, string>;
+  return {
+    ...rest,
+    act: old.act ?? old.actAndStage ?? 'TechForAct',
+    stage: old.stage ?? old.actStage ?? 'ActStage',
+    usedCraftStation: old.usedCraftStation ?? 'UsedCraftStation',
+  };
+}
+
 const DEFAULT_COLUMN_MAPPING: NotionColumnMapping = {
   workingName: 'WorkingName',
   techCraftId: 'TechCraftID',
-  actAndStage: 'ActAndStage',
-  actStage: 'ActStage',
+  act: 'TechForAct',
+  stage: 'ActStage',
   category: 'CategoryFromItem',
   prevTechs: 'PrevTechs',
   nextTechs: 'NextTechs',
   ingredients: 'Ingridients',
   usedStation: 'UsedStation',
+  usedCraftStation: 'UsedCraftStation',
   outputItem: 'OutputItem',
   powerType: 'CraftStationPowerType',
   gameStatus: 'CraftStatusInGame',
@@ -81,7 +93,9 @@ export const NotionSyncModal = () => {
           ? NOTION_BUILTIN_PROXY
           : (notionCorsProxy ?? '')
       );
-      setMapping(notionConfig?.columnMapping ? { ...DEFAULT_COLUMN_MAPPING, ...notionConfig.columnMapping } : { ...DEFAULT_COLUMN_MAPPING });
+      const baseMapping = notionConfig?.columnMapping ?? {};
+      const migrated = migrateColumnMapping(baseMapping);
+      setMapping(notionConfig?.columnMapping ? { ...DEFAULT_COLUMN_MAPPING, ...migrated } : { ...DEFAULT_COLUMN_MAPPING });
       setSyncLog([]);
       setSyncResult(null);
     }
@@ -109,7 +123,20 @@ export const NotionSyncModal = () => {
       const res = await testNotionConnection(databaseId, apiKey, getEffectiveProxy());
       if (res.success) {
         setDbTitle(res.title || '');
-        setDbProperties(res.properties || []);
+        const props = res.properties || [];
+        setDbProperties(props);
+        if (props.includes('TechForAct')) {
+          setMapping((prev) => ({ ...prev, act: 'TechForAct' }));
+        }
+        if (props.includes('ActStage')) {
+          setMapping((prev) => ({ ...prev, stage: 'ActStage' }));
+        }
+        if (props.includes('UsedCraftStation')) {
+          setMapping((prev) => ({ ...prev, usedCraftStation: 'UsedCraftStation' }));
+        }
+        if (props.includes('UsedStation')) {
+          setMapping((prev) => ({ ...prev, usedStation: 'UsedStation' }));
+        }
         setStep('mapping');
       } else {
         setTestError(res.error || 'Connection failed');
@@ -538,13 +565,14 @@ export const NotionSyncModal = () => {
               <div className="grid grid-cols-2 gap-3">
                 {renderMappingSelect('Название (Title)', 'workingName')}
                 {renderMappingSelect('TechCraft ID', 'techCraftId')}
-                {renderMappingSelect('Акт и Стадия', 'actAndStage')}
-                {renderMappingSelect('Стадия', 'actStage')}
+                {renderMappingSelect('Акт (TechForAct)', 'act')}
+                {renderMappingSelect('Стадия (ActStage)', 'stage')}
                 {renderMappingSelect('Категория', 'category')}
                 {renderMappingSelect('Пред. технологии (Relation)', 'prevTechs')}
                 {renderMappingSelect('След. технологии (Relation)', 'nextTechs')}
                 {renderMappingSelect('Ингредиенты (Relation)', 'ingredients')}
                 {renderMappingSelect('Станция крафта (Relation)', 'usedStation')}
+                {renderMappingSelect('На чём крафтится (UsedCraftStation)', 'usedCraftStation')}
                 {renderMappingSelect('Выходной предмет (Relation)', 'outputItem')}
                 {renderMappingSelect('Тип питания', 'powerType')}
                 {renderMappingSelect('Статус в игре', 'gameStatus')}

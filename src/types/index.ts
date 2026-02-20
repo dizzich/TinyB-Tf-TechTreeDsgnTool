@@ -40,6 +40,10 @@ export interface NodeData {
   outputDetail?: string;
   /** Parsed used station(s) with Notion refs */
   usedStations?: NotionRef[];
+  /** Resolved display: на чём крафтится (from UsedCraftStation relation) */
+  usedCraftStation?: string;
+  /** Notion refs for UsedCraftStation (links) */
+  usedCraftStationRefs?: NotionRef[];
   /** Parsed output item with Notion ref */
   outputItemRef?: NotionRef;
 
@@ -130,10 +134,10 @@ export interface NotionColumnMapping {
   workingName: string;
   /** Notion property → TechCraftID */
   techCraftId: string;
-  /** Notion property → ActAndStage */
-  actAndStage: string;
-  /** Notion property → ActStage */
-  actStage: string;
+  /** Notion property → Act (e.g. TechForAct: 🌳Act 1, 🍄Act 2) */
+  act: string;
+  /** Notion property → ActStage (Стадия) */
+  stage: string;
   /** Notion property → CategoryFromItem */
   category: string;
   /** Notion relation property → PrevTechs */
@@ -144,6 +148,8 @@ export interface NotionColumnMapping {
   ingredients: string;
   /** Notion property → UsedStation (relation) */
   usedStation: string;
+  /** Notion property (relation) → UsedCraftStation */
+  usedCraftStation: string;
   /** Notion property → OutputItem (relation) */
   outputItem: string;
   /** Notion property → CraftStationPowerType */
@@ -193,7 +199,7 @@ export interface ImportMapping {
   nextTechsColumn?: string; // Outgoing relations (NextTechs)
 }
 
-export type NodeColorBy = 'category' | 'stage' | 'act' | 'powerType' | 'gameStatus' | 'openCondition';
+export type NodeColorBy = 'category' | 'stage' | 'act' | 'powerType' | 'gameStatus' | 'openCondition' | 'usedCraftStation' | 'usedStation';
 
 export const DEFAULT_NODE_COLOR_PALETTE = [
   '#6aa2ff', '#a78bfa', '#f59e42', '#34d399',
@@ -265,6 +271,8 @@ export type FilterProperty =
   | 'openConditionRefs'
   | 'outputItem'
   | 'formulaUsedStation'
+  | 'usedCraftStation'
+  | 'usedStation'
   | 'itemLootingInAct'
   | 'electricCost'
   | 'researchTime';

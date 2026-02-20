@@ -172,10 +172,25 @@ const defaultMeta: ProjectMeta = {
   version: '1.0',
   };
 
+/** Migrate old actAndStage/actStage to act/stage; ensure usedCraftStation */
+function migrateNotionColumnMapping(old: Record<string, unknown>): void {
+  const cm = old as Record<string, string>;
+  if (!cm.act && cm.actAndStage) cm.act = cm.actAndStage;
+  if (!cm.act) cm.act = 'TechForAct';
+  if (!cm.stage && cm.actStage) cm.stage = cm.actStage;
+  if (!cm.stage) cm.stage = 'ActStage';
+  if (!cm.usedCraftStation) cm.usedCraftStation = 'UsedCraftStation';
+}
+
 const loadNotionConfig = (): NotionConfig | null => {
   try {
     const stored = localStorage.getItem(NOTION_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : null;
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as NotionConfig;
+    if (parsed?.columnMapping) {
+      migrateNotionColumnMapping(parsed.columnMapping as unknown as Record<string, unknown>);
+    }
+    return parsed;
   } catch {
     return null;
   }

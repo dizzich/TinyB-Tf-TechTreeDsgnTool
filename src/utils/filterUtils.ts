@@ -6,6 +6,21 @@ function getPropertyValue(node: TechNode, property: FilterProperty): string {
     if (!Array.isArray(refs) || refs.length === 0) return '';
     return refs.map((r: { name?: string }) => r?.name ?? '').filter(Boolean).join('\x00');
   }
+  if (property === 'act') {
+    const raw = node.data?.techForAct ?? node.data?.act;
+    if (raw === undefined || raw === null) return '';
+    return String(raw).trim();
+  }
+  if (property === 'usedCraftStation') {
+    const raw = node.data?.usedCraftStation ?? node.data?.usedCraftStationRefs?.map((r: { name?: string }) => r.name).filter(Boolean).join(', ');
+    if (raw === undefined || raw === null || raw === '') return '';
+    return String(raw).trim();
+  }
+  if (property === 'usedStation') {
+    const raw = node.data?.usedStations?.map((r: { name?: string }) => r.name).filter(Boolean).join(', ');
+    if (raw === undefined || raw === null || raw === '') return '';
+    return String(raw).trim();
+  }
   const raw = node.data?.[property];
   if (raw === undefined || raw === null) return '';
   return String(raw).trim();
@@ -67,7 +82,7 @@ export function buildUniqueValuesMap(nodes: TechNode[]): Record<FilterProperty, 
   const props: FilterProperty[] = [
     'act', 'stage', 'category', 'powerType', 'gameStatus', 'designStatus',
     'notionSyncStatus', 'techGameStatus', 'techForAct', 'openCondition',
-    'openConditionRefs', 'outputItem', 'formulaUsedStation', 'itemLootingInAct',
+    'openConditionRefs', 'outputItem', 'formulaUsedStation', 'usedCraftStation', 'usedStation', 'itemLootingInAct',
     'electricCost', 'researchTime',
   ];
   const out: Record<string, string[]> = {};

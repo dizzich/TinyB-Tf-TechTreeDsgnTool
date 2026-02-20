@@ -33,9 +33,13 @@ export const Sidebar = () => {
         const bLabel = b.data?.label || b.id;
         return aLabel.localeCompare(bLabel);
       } else if (sortBy === 'act') {
-        const aAct = parseInt(a.data?.act?.toString() || '0');
-        const bAct = parseInt(b.data?.act?.toString() || '0');
-        return aAct - bAct;
+        const parseAct = (d: { act?: string | number; techForAct?: string }) => {
+          const v = d?.techForAct ?? d?.act;
+          if (v == null) return 0;
+          const m = String(v).match(/(\d+)/);
+          return m ? parseInt(m[1], 10) : parseInt(String(v), 10) || 0;
+        };
+        return parseAct(a.data ?? {}) - parseAct(b.data ?? {});
       } else if (sortBy === 'stage') {
         const aStage = parseInt(a.data?.stage?.toString() || '0');
         const bStage = parseInt(b.data?.stage?.toString() || '0');
@@ -168,7 +172,7 @@ export const Sidebar = () => {
                         {node.data?.label || node.id}
                       </div>
                       <div className="event-list__meta text-xs text-muted mt-0.5 truncate">
-                        {node.data?.act && `Акт ${node.data.act}`}
+                        {(node.data?.techForAct || node.data?.act) && (node.data.techForAct || `Акт ${node.data.act}`)}
                         {node.data?.stage && ` | Стадия ${node.data.stage}`}
                         {node.data?.category && (
                           <span className="text-muted/70"> · {node.data.category}</span>

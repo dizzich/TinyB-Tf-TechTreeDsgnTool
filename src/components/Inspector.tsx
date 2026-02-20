@@ -195,7 +195,14 @@ export const Inspector = () => {
   };
 
   // Options from all nodes for dropdowns
-  const actOptions = useMemo(() => collectOptions(nodes, 'act'), [nodes]);
+  const actOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const n of nodes) {
+      const v = n.data?.techForAct ?? n.data?.act;
+      if (v != null && String(v).trim()) set.add(String(v).trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [nodes]);
   const stageOptions = useMemo(() => collectOptions(nodes, 'stage'), [nodes]);
   const categoryOptions = useMemo(() => collectOptions(nodes, 'category'), [nodes]);
   const powerTypeOptions = useMemo(() => collectOptions(nodes, 'powerType'), [nodes]);
@@ -314,11 +321,11 @@ export const Inspector = () => {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <ChipSelect
-                label="Акт"
-                value={d?.act != null ? String(d.act) : ''}
+                label="Акт (TechForAct)"
+                value={(d?.techForAct ?? d?.act) != null ? String(d.techForAct ?? d.act) : ''}
                 options={actOptions}
-                color={getChipColor('act', d?.act)}
-                onChange={(v) => handleChange('act', v || undefined)}
+                color={getChipColor('act', (d?.techForAct ?? d?.act) as string)}
+                onChange={(v) => handleChange('techForAct', v || undefined)}
               />
               <ChipSelect
                 label="Стадия"
@@ -444,6 +451,90 @@ export const Inspector = () => {
                 );
               })()}
             </div>
+            {(d?.usedStations?.length) && (
+              <div>
+                <label className={labelClass}>Станция крафта (UsedStation)</label>
+                <div className="space-y-1">
+                  {d.usedStations.map((ref: { name?: string; pageId?: string }, i: number) => {
+                    const color = getChipColor('usedStation', ref.name);
+                    const style = {
+                      backgroundColor: color ? `${color}20` : undefined,
+                      borderLeftWidth: color ? '3px' : undefined,
+                      borderLeftColor: color || undefined,
+                      boxShadow: color ? `0 0 10px ${color}40` : undefined,
+                    };
+                    const content = (
+                      <>
+                        <span className="truncate flex-1 min-w-0">{ref.name}</span>
+                        {ref.pageId && <NotionIcon size={14} className="flex-shrink-0 ml-1.5 opacity-90" color={color} />}
+                      </>
+                    );
+                    return ref.pageId ? (
+                      <a
+                        key={i}
+                        href={getNotionPageUrl(ref.pageId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
+                        style={style}
+                        title="Открыть в Notion"
+                      >
+                        {content}
+                      </a>
+                    ) : (
+                      <div key={i} className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
+                        <span className="truncate">{ref.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {(d?.usedCraftStationRefs?.length || d?.usedCraftStation) && (
+              <div>
+                <label className={labelClass}>На чём крафтится (UsedCraftStation)</label>
+                {d.usedCraftStationRefs?.length ? (
+                  <div className="space-y-1">
+                    {d.usedCraftStationRefs.map((ref: { name?: string; pageId?: string }, i: number) => {
+                      const color = getChipColor('usedCraftStation', ref.name);
+                      const style = {
+                        backgroundColor: color ? `${color}20` : undefined,
+                        borderLeftWidth: color ? '3px' : undefined,
+                        borderLeftColor: color || undefined,
+                        boxShadow: color ? `0 0 10px ${color}40` : undefined,
+                      };
+                      const content = (
+                        <>
+                          <span className="truncate flex-1 min-w-0">{ref.name}</span>
+                          {ref.pageId && <NotionIcon size={14} className="flex-shrink-0 ml-1.5 opacity-90" color={color} />}
+                        </>
+                      );
+                      return ref.pageId ? (
+                        <a
+                          key={i}
+                          href={getNotionPageUrl(ref.pageId)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
+                          style={style}
+                          title="Открыть в Notion"
+                        >
+                          {content}
+                        </a>
+                      ) : (
+                        <div key={i} className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
+                          <span className="truncate">{ref.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <span className="text-xs px-2 py-1 rounded-[8px] bg-control-bg-muted text-text border border-control-border-muted">
+                    {d.usedCraftStation}
+                  </span>
+                )}
+              </div>
+            )}
             {(d?.formulaIngridients || d?.formulaUsedStation || d?.outputItem) && (
               <div className="space-y-1.5">
                 {d.formulaIngridients && (
@@ -499,7 +590,7 @@ export const Inspector = () => {
                 )}
               </div>
             )}
-            {(d?.electricCost || d?.researchTime || d?.notes || d?.itemLootingInAct || d?.techForAct) && (
+            {(d?.electricCost || d?.researchTime || d?.notes || d?.itemLootingInAct) && (
               <div>
                 <label className={labelClass}>Доп. параметры</label>
                 <div className="flex flex-wrap gap-1.5">
@@ -516,11 +607,6 @@ export const Inspector = () => {
                 {d.itemLootingInAct && (
                   <span className="text-xs px-2 py-0.5 rounded-[8px] bg-amber-500/15 text-amber-600 dark:text-amber-400">
                     {d.itemLootingInAct}
-                  </span>
-                )}
-                {d.techForAct && (
-                  <span className="text-xs px-2 py-0.5 rounded-[8px] bg-panel-2 border border-panel-border">
-                    {d.techForAct}
                   </span>
                 )}
                 {d.notes && (

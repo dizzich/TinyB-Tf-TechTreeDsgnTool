@@ -50,13 +50,17 @@ export function getColorValue(data: Record<string, any>, colorBy: NodeColorBy): 
     case 'stage':
       return data.stage != null ? String(data.stage) : undefined;
     case 'act':
-      return data.act != null ? String(data.act) : undefined;
+      return (data.techForAct ?? data.act) != null ? String(data.techForAct ?? data.act) : undefined;
     case 'powerType':
       return data.powerType;
     case 'gameStatus':
       return data.gameStatus;
     case 'openCondition':
       return data.openCondition;
+    case 'usedCraftStation':
+      return data.usedCraftStationRefs?.[0]?.name ?? data.usedCraftStation ?? data.usedCraftStationRefs?.map((r: { name?: string }) => r.name).filter(Boolean).join(', ') ?? undefined;
+    case 'usedStation':
+      return data.usedStations?.[0]?.name ?? data.usedStations?.map((r: { name?: string }) => r.name).filter(Boolean).join(', ') ?? undefined;
     default:
       return data.category;
   }

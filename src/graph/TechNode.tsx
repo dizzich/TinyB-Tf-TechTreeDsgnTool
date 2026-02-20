@@ -151,16 +151,16 @@ const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected
               >
                 {displayLabel}
               </div>
-              {(safeData.act || safeData.stage || safeData.category) && (
+              {(safeData.techForAct || safeData.act || safeData.stage || safeData.category) && (
                 <div
                   className={clsx(
                     'text-[12px] text-muted mt-0.5',
                     nodeTextFit && 'truncate overflow-hidden'
                   )}
                 >
-                  {safeData.act && `Act ${safeData.act}`}
-                  {safeData.stage && `${safeData.act ? ' \u00b7 ' : ''}Stage ${safeData.stage}`}
-                  {safeData.category && `${safeData.act || safeData.stage ? ' \u00b7 ' : ''}${safeData.category}`}
+                  {(safeData.techForAct || safeData.act) && (safeData.techForAct || `Act ${safeData.act}`)}
+                  {safeData.stage && `${safeData.techForAct || safeData.act ? ' \u00b7 ' : ''}Stage ${safeData.stage}`}
+                  {safeData.category && `${safeData.techForAct || safeData.act || safeData.stage ? ' \u00b7 ' : ''}${safeData.category}`}
                 </div>
               )}
             </>
