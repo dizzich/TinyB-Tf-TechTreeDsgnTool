@@ -51,24 +51,21 @@ export const FlowMiniMap = ({ onHide }: FlowMiniMapProps) => {
   }, [miniZoom]);
 
   const handlePanStart = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
-      if (miniZoom <= 1 || centerLocked) return;
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      // Keep LMB for native minimap navigation; custom minimap panning uses MMB only.
+      if (e.button !== 1 || miniZoom <= 1 || centerLocked) return;
       e.preventDefault();
       setIsPanning(true);
-      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-      panStart.current = { x: clientX, y: clientY, panX: pan.x, panY: pan.y };
+      panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
     },
     [miniZoom, centerLocked, pan]
   );
 
-  const handlePanMove = useCallback((e: MouseEvent | TouchEvent) => {
+  const handlePanMove = useCallback((e: MouseEvent) => {
     if (!panStart.current) return;
     e.preventDefault();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const dx = clientX - panStart.current.x;
-    const dy = clientY - panStart.current.y;
+    const dx = e.clientX - panStart.current.x;
+    const dy = e.clientY - panStart.current.y;
     setPan({ x: panStart.current.panX + dx, y: panStart.current.panY + dy });
   }, []);
 
@@ -79,17 +76,13 @@ export const FlowMiniMap = ({ onHide }: FlowMiniMapProps) => {
 
   React.useEffect(() => {
     if (!isPanning) return;
-    const onMove = (e: MouseEvent | TouchEvent) => handlePanMove(e);
+    const onMove = (e: MouseEvent) => handlePanMove(e);
     const onUp = () => handlePanEnd();
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', onUp);
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onUp);
     };
   }, [isPanning, handlePanMove, handlePanEnd]);
 
@@ -194,22 +187,21 @@ export const FlowMiniMap = ({ onHide }: FlowMiniMapProps) => {
       <div
         className="minimap-pan-area"
         style={{
-          cursor: miniZoom > 1 && !centerLocked ? (isPanning ? 'grabbing' : 'grab') : undefined,
+          cursor: isPanning ? 'grabbing' : undefined,
         }}
         onMouseDown={handlePanStart}
-        onTouchStart={handlePanStart}
       >
         <MiniMap
-          pannable={miniZoom <= 1}
+          pannable
           zoomable
-        nodeColor={getMiniMapNodeColor}
-        nodeStrokeColor={getMiniMapNodeStrokeColor}
-        nodeStrokeWidth={1}
-        bgColor={theme === 'dark' ? '#0d1117' : '#f5f7fb'}
-        maskColor={theme === 'dark' ? 'rgba(6, 10, 16, 0.45)' : 'rgba(245, 247, 251, 0.6)'}
-        maskStrokeColor={theme === 'dark' ? '#7ab6ff' : '#2f5dd0'}
-        maskStrokeWidth={1}
-        style={minimapStyle}
+          nodeColor={getMiniMapNodeColor}
+          nodeStrokeColor={getMiniMapNodeStrokeColor}
+          nodeStrokeWidth={1}
+          bgColor={theme === 'dark' ? '#0d1117' : '#f5f7fb'}
+          maskColor={theme === 'dark' ? 'rgba(6, 10, 16, 0.45)' : 'rgba(245, 247, 251, 0.6)'}
+          maskStrokeColor={theme === 'dark' ? '#7ab6ff' : '#2f5dd0'}
+          maskStrokeWidth={1}
+          style={minimapStyle}
         />
       </div>
       <div className="minimap-zoom">

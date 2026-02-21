@@ -42,7 +42,11 @@ export const useNotionPolling = () => {
         if (hasUpdates) {
           useStore.getState().setNotionHasRemoteUpdates(true);
           const current = useStore.getState();
-          if ((current.syncMode === 'pull' || current.syncMode === 'bidirectional') && current.dirtyNodeIds.size === 0) {
+          if (
+            (current.syncMode === 'pull' || current.syncMode === 'bidirectional') &&
+            current.dirtyNodeIds.size === 0 &&
+            Object.keys(current.deletedNotionTombstones).length === 0
+          ) {
             doPullRef.current();
           }
         }

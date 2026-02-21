@@ -89,6 +89,7 @@ export const Toolbar = () => {
   const setAllowBackgroundSync = useStore((state) => state.setAllowBackgroundSync);
   const setSyncMode = useStore((state) => state.setSyncMode);
   const setForceShowStartupModal = useStore((state) => state.setForceShowStartupModal);
+  const deletedTombstoneCount = Object.keys(deletedNotionTombstones).length;
 
   const { saveProject, openProject } = useFileSystem();
   const { doPush, doPull, canSync } = useNotionSyncActions();
@@ -265,7 +266,8 @@ export const Toolbar = () => {
   const handleOpen = async () => {
     setProjectMenuOpen(false);
     const hasUnsaved =
-      offlineDirty || (notionConnected && notionDirty && dirtyNodeIds.size > 0);
+      offlineDirty ||
+      (notionConnected && (notionDirty || dirtyNodeIds.size > 0 || deletedTombstoneCount > 0));
     if (hasUnsaved) {
       if (sessionStorage.getItem('techtree_suppress_unsaved_prompt') === 'true') {
         await doOpenProject();
@@ -286,7 +288,8 @@ export const Toolbar = () => {
   const handleOpenNewProject = () => {
     setProjectMenuOpen(false);
     const hasUnsaved =
-      offlineDirty || (notionConnected && notionDirty && dirtyNodeIds.size > 0);
+      offlineDirty ||
+      (notionConnected && (notionDirty || dirtyNodeIds.size > 0 || deletedTombstoneCount > 0));
     if (hasUnsaved) {
       if (sessionStorage.getItem('techtree_suppress_unsaved_prompt') === 'true') {
         doOpenNewProject();

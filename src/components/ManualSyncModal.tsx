@@ -15,6 +15,7 @@ import {
   pushToNotion,
   computeSyncDiffs,
   pushNodePropertyToNotion,
+  archiveNotionPages,
   DIFF_FIELD_LABELS,
   NOTION_BUILTIN_PROXY,
 } from '../utils/notionApi';
@@ -222,6 +223,8 @@ export const ManualSyncModal = () => {
   const setEdges = useStore((s) => s.setEdges);
   const applyRemoteFieldToGraph = useStore((s) => s.applyRemoteFieldToGraph);
   const addNode = useStore((s) => s.addNode);
+  const deletedNotionTombstones = useStore((s) => s.deletedNotionTombstones);
+  const clearDeletedNotionTombstones = useStore((s) => s.clearDeletedNotionTombstones);
 
   const [loading, setLoading] = useState(true);
   const [loadingInfo, setLoadingInfo] = useState<string>('Инициализация');
@@ -451,6 +454,15 @@ export const ManualSyncModal = () => {
     [remoteNodes]
   );
 
+  const getDeletedTombstone = (d: SyncDiffItem) =>
+    d.notionPageId ? deletedNotionTombstones[d.notionPageId] : undefined;
+
+  const isLocallyDeletedRemoteNode = (d: SyncDiffItem): boolean =>
+    d.kind === 'remoteOnly' &&
+    d.field === '_node' &&
+    !!d.notionPageId &&
+    !!deletedNotionTombstones[d.notionPageId];
+
   const isSelected = (d: SyncDiffItem): boolean => selectedDiffKeys.has(getDiffKey(d));
 
   const toggleDiff = (d: SyncDiffItem) => {
@@ -513,6 +525,7 @@ export const ManualSyncModal = () => {
   const resolveFreshness = (d: SyncDiffItem): DiffFreshness => {
     if (manualSyncMode === 'conflicts') return 'unknown';
     if (d.kind === 'localOnly') return 'local';
+    if (isLocallyDeletedRemoteNode(d)) return 'local';
     if (d.kind === 'remoteOnly') return 'remote';
 
     const localNode = localNodesById.get(d.nodeId);
@@ -546,6 +559,21 @@ export const ManualSyncModal = () => {
   const resolveDiffTimestamps = (
     d: SyncDiffItem
   ): { localIso?: string; remoteIso?: string } => {
+    if (isLocallyDeletedRemoteNode(d)) {
+      const tombstone = getDeletedTombstone(d);
+      const remoteFromValue =
+        d.remoteValue &&
+        typeof d.remoteValue === 'object' &&
+        'data' in (d.remoteValue as object)
+          ? (d.remoteValue as TechNode).data.updatedAt
+          : undefined;
+      const remoteFromMap = d.notionPageId ? remoteNodesByPageId.get(d.notionPageId)?.data.updatedAt : undefined;
+      return {
+        localIso: tombstone?.deletedAt,
+        remoteIso: remoteFromValue ?? remoteFromMap,
+      };
+    }
+
     if (d.kind !== 'both') return {};
 
     const localNode = localNodesById.get(d.nodeId);
@@ -681,6 +709,20 @@ export const ManualSyncModal = () => {
     }
 
     if (d.kind === 'remoteOnly') {
+      if (isLocallyDeletedRemoteNode(d) && d.notionPageId) {
+        const archived = await archiveNotionPages(
+          [d.notionPageId],
+          notionConfig,
+          getEffectiveProxy()
+        );
+        if (archived.errors.length > 0) {
+          throw new Error(archived.errors[0]);
+        }
+        if (archived.archivedIds.length > 0) {
+          clearDeletedNotionTombstones(archived.archivedIds);
+        }
+        return;
+      }
       throw new Error('Изменение есть только в Notion. Нечего отправлять в Notion.');
     }
 
@@ -791,6 +833,47 @@ export const ManualSyncModal = () => {
     setBatchSummary(null);
     const nodeDiffs = diffsByNode.get(nodeId) || [];
     const localNode = nodes.find((n) => n.id === nodeId);
+    const locallyDeletedRemoteDiffs = nodeDiffs.filter((d) => isLocallyDeletedRemoteNode(d));
+    const locallyDeletedPageIds = Array.from(
+      new Set(
+        locallyDeletedRemoteDiffs
+          .map((d) => d.notionPageId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      )
+    );
+    if (locallyDeletedRemoteDiffs.length > 0 && locallyDeletedRemoteDiffs.length === nodeDiffs.length) {
+      setApplyingId(`${nodeId}:_archive_all`);
+      try {
+        const archived = await archiveNotionPages(
+          locallyDeletedPageIds,
+          notionConfig,
+          getEffectiveProxy()
+        );
+        if (archived.archivedIds.length > 0) {
+          clearDeletedNotionTombstones(archived.archivedIds);
+        }
+        if (archived.errors.length > 0) {
+          setError(archived.errors[0]);
+        }
+        const successful = new Set(
+          locallyDeletedRemoteDiffs
+            .filter((d) => d.notionPageId && archived.archivedIds.includes(d.notionPageId))
+            .map(getDiffKey)
+        );
+        if (successful.size > 0) {
+          setDiffs((prev) => prev.filter((d) => !successful.has(getDiffKey(d))));
+          setSelectedDiffKeys((prev) => {
+            const next = new Set(prev);
+            successful.forEach((key) => next.delete(key));
+            return next;
+          });
+        }
+      } finally {
+        setApplyingId(null);
+      }
+      return;
+    }
+
     const isLocalOnly = nodeDiffs.some((d) => d.kind === 'localOnly');
 
     if (isLocalOnly && localNode) {
@@ -1137,8 +1220,19 @@ export const ManualSyncModal = () => {
                             d.field,
                             notionConfig?.columnMapping
                           );
+                          const isDeletedLocallyRemote = isLocallyDeletedRemoteNode(d);
+                          const displayFieldLabel = isDeletedLocallyRemote
+                            ? 'Нода (удалено локально)'
+                            : d.fieldLabel;
                           const freshness = resolveFreshness(d);
                           const diffTimestamps = resolveDiffTimestamps(d);
+                          const showTimestamps = d.kind === 'both' || isDeletedLocallyRemote;
+                          const remoteDisplay = isDeletedLocallyRemote
+                            ? 'Страница существует в Notion'
+                            : formatValue(d.remoteValue);
+                          const localDisplay = isDeletedLocallyRemote
+                            ? 'Удалено локально (ожидает архивирования)'
+                            : formatValue(d.localValue);
                           const arrow =
                             freshness === 'local'
                               ? '\u2192'
@@ -1174,50 +1268,72 @@ export const ManualSyncModal = () => {
 
                               <div className="w-64 shrink-0">
                                 <div className="font-medium text-muted leading-tight">
-                                  {d.fieldLabel} <span className="text-xs text-muted/80">("{notionAttr}")</span>
+                                  {displayFieldLabel}{' '}
+                                  <span className="text-xs text-muted/80">("{notionAttr}")</span>
                                 </div>
                               </div>
 
                               <div className={`min-w-0 flex-1 rounded-small px-2 py-1 ${notionTone}`}>
                                 <div className="text-[11px] text-muted mb-0.5">Notion</div>
-                                {d.kind === 'both' && (
+                                {showTimestamps && (
                                   <div className="text-[10px] text-muted/80 mb-1">
                                     Изменено: {formatDisplayTimestamp(diffTimestamps.remoteIso)}
                                   </div>
                                 )}
                                 <div
                                   className="whitespace-pre-wrap break-words leading-snug text-text"
-                                  title={formatValue(d.remoteValue)}
+                                  title={remoteDisplay}
                                 >
-                                  {formatValue(d.remoteValue)}
+                                  {remoteDisplay}
                                 </div>
                               </div>
                               <span className="text-muted mt-4">{arrow}</span>
                               <div className={`min-w-0 flex-1 rounded-small px-2 py-1 ${graphTone}`}>
                                 <div className="text-[11px] text-muted mb-0.5">Граф</div>
-                                {d.kind === 'both' && (
+                                {showTimestamps && (
                                   <div className="text-[10px] text-muted/80 mb-1">
                                     Изменено: {formatDisplayTimestamp(diffTimestamps.localIso)}
                                   </div>
                                 )}
                                 <div
                                   className="whitespace-pre-wrap break-words leading-snug text-text"
-                                  title={formatValue(d.localValue)}
+                                  title={localDisplay}
                                 >
-                                  {formatValue(d.localValue)}
+                                  {localDisplay}
                                 </div>
                               </div>
 
                               <div className="flex gap-1 shrink-0">
                                 {d.kind === 'remoteOnly' ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => void handlePullToGraph(d)}
-                                    disabled={!!applyingId}
-                                    className="px-2 py-1 text-xs rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 disabled:opacity-50"
-                                  >
-                                    Добавить в граф
-                                  </button>
+                                  isDeletedLocallyRemote ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => void handlePullToGraph(d)}
+                                        disabled={!!applyingId}
+                                        className="px-2 py-1 text-xs rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 disabled:opacity-50"
+                                      >
+                                        Восстановить в граф
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => void handlePushToNotion(d)}
+                                        disabled={!!applyingId}
+                                        className="px-2 py-1 text-xs rounded bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-50"
+                                      >
+                                        Удалить в Notion
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handlePullToGraph(d)}
+                                      disabled={!!applyingId}
+                                      className="px-2 py-1 text-xs rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 disabled:opacity-50"
+                                    >
+                                      Добавить в граф
+                                    </button>
+                                  )
                                 ) : d.kind === 'localOnly' ? (
                                   <button
                                     type="button"

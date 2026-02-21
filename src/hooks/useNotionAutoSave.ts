@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
-import { pushToNotion, pullFromNotionIncremental, NOTION_BUILTIN_PROXY } from '../utils/notionApi';
+import {
+  pushToNotion,
+  pullFromNotionIncremental,
+  archiveNotionPages,
+  NOTION_BUILTIN_PROXY,
+} from '../utils/notionApi';
 import { getLayoutedElements } from '../utils/autoLayout';
 
 const AUTO_SAVE_DELAY = 3000; // 3 seconds debounce
@@ -30,7 +35,9 @@ export const useNotionAutoSave = () => {
   const setLastSyncError = useStore((s) => s.setLastSyncError);
   const setNotionDirty = useStore((s) => s.setNotionDirty);
   const dirtyNodeIds = useStore((s) => s.dirtyNodeIds);
+  const deletedNotionTombstones = useStore((s) => s.deletedNotionTombstones);
   const clearDirtyNodes = useStore((s) => s.clearDirtyNodes);
+  const clearDeletedNotionTombstones = useStore((s) => s.clearDeletedNotionTombstones);
   const syncJustCompleted = useStore((s) => s.syncJustCompleted);
   const setSyncJustCompleted = useStore((s) => s.setSyncJustCompleted);
 
@@ -69,30 +76,47 @@ export const useNotionAutoSave = () => {
     // Debounce the push
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
-      if (nodes.length === 0) return;
-
       // Re-check syncInProgress from store (it could have changed during debounce)
       if (useStore.getState().syncInProgress) return;
 
       const dirty = useStore.getState().dirtyNodeIds;
-      // Only push nodes that were actually changed in the graph; never full push from auto-save
-      if (dirty.size === 0) return;
+      const pendingDeletePageIds = Object.keys(useStore.getState().deletedNotionTombstones);
+      // Only push changed nodes (or pending local deletions); never full push from auto-save.
+      if (dirty.size === 0 && pendingDeletePageIds.length === 0) return;
 
       try {
         setSyncInProgress(true);
-        setSyncProgress({ current: 0, total: dirty.size });
+        setSyncProgress({
+          current: 0,
+          total: dirty.size > 0 ? dirty.size : pendingDeletePageIds.length,
+        });
         const proxy = getEffectiveProxy(notionCorsProxy);
-        await pushToNotion(
-          nodes,
-          edges,
-          notionConfig,
-          proxy,
-          (current, total) => useStore.getState().setSyncProgress({ current, total }),
-          dirty
-        );
+        const pushResult =
+          dirty.size > 0
+            ? await pushToNotion(
+                nodes,
+                edges,
+                notionConfig,
+                proxy,
+                (current, total) => useStore.getState().setSyncProgress({ current, total }),
+                dirty
+              )
+            : { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] as string[] };
+
+        if (pendingDeletePageIds.length > 0) {
+          const archived = await archiveNotionPages(pendingDeletePageIds, notionConfig, proxy);
+          if (archived.archivedIds.length > 0) {
+            clearDeletedNotionTombstones(archived.archivedIds);
+            pushResult.deleted += archived.archivedIds.length;
+          }
+          if (archived.errors.length > 0) {
+            pushResult.errors.push(...archived.errors);
+          }
+        }
+
         setLastSyncTime(new Date().toISOString());
-        setLastSyncError(null);
-        setNotionDirty(false);
+        setLastSyncError(pushResult.errors.length > 0 ? pushResult.errors[0] : null);
+        setNotionDirty(pushResult.errors.length > 0);
         clearDirtyNodes();
       } catch (err) {
         console.error('[Notion auto-save] Failed:', err);
@@ -106,7 +130,7 @@ export const useNotionAutoSave = () => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [nodes, edges, allowBackgroundSync, syncMode, notionConfig, syncInProgress, notionCorsProxy, dirtyNodeIds, syncJustCompleted, setSyncJustCompleted, setSyncInProgress, setSyncProgress, setLastSyncTime, setLastSyncError, setNotionDirty, clearDirtyNodes]);
+  }, [nodes, edges, allowBackgroundSync, syncMode, notionConfig, syncInProgress, notionCorsProxy, dirtyNodeIds, deletedNotionTombstones, syncJustCompleted, setSyncJustCompleted, setSyncInProgress, setSyncProgress, setLastSyncTime, setLastSyncError, setNotionDirty, clearDirtyNodes, clearDeletedNotionTombstones]);
 
   // Auto-pull incoming changes when safe: notionSourceOfTruth enabled, remote updates flagged, no local dirty nodes
   const notionHasRemoteUpdates = useStore((s) => s.notionHasRemoteUpdates);
@@ -122,7 +146,8 @@ export const useNotionAutoSave = () => {
       syncInProgress ||
       syncMode === 'pause' ||
       (syncMode !== 'pull' && syncMode !== 'bidirectional') ||
-      dirtyNodeIds.size > 0
+      dirtyNodeIds.size > 0 ||
+      Object.keys(deletedNotionTombstones).length > 0
     )
       return;
 
@@ -157,5 +182,5 @@ export const useNotionAutoSave = () => {
     })();
 
     return () => { cancelled = true; };
-  }, [notionHasRemoteUpdates, allowBackgroundSync, syncMode, notionConfig, syncInProgress, dirtyNodeIds, notionCorsProxy, setSyncInProgress, setLastSyncTime, setLastSyncError, setNotionHasRemoteUpdates, replaceNodesAndEdgesForSync, settings]);
+  }, [notionHasRemoteUpdates, allowBackgroundSync, syncMode, notionConfig, syncInProgress, dirtyNodeIds, deletedNotionTombstones, notionCorsProxy, setSyncInProgress, setLastSyncTime, setLastSyncError, setNotionHasRemoteUpdates, replaceNodesAndEdgesForSync, settings]);
 };

@@ -2,7 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { X, RefreshCw, Download, Upload, CheckCircle, AlertCircle, Loader2, Unplug, Plug, RotateCcw, Pause, Hand } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { NotionConfig, NotionColumnMapping } from '../types';
-import { testNotionConnection, pullFromNotion, pullFromNotionIncremental, pushToNotion, bidirectionalSync, checkForNotionUpdates, NOTION_BUILTIN_PROXY } from '../utils/notionApi';
+import {
+  testNotionConnection,
+  pullFromNotion,
+  pullFromNotionIncremental,
+  pushToNotion,
+  bidirectionalSync,
+  checkForNotionUpdates,
+  archiveNotionPages,
+  NOTION_BUILTIN_PROXY,
+} from '../utils/notionApi';
 import { getLayoutedElements } from '../utils/autoLayout';
 
 /** Migrate old actAndStage+actStage to act + stage */
@@ -66,6 +75,8 @@ export const NotionSyncModal = () => {
   const syncProgress = useStore((s) => s.syncProgress);
   const clearDirtyNodes = useStore((s) => s.clearDirtyNodes);
   const dirtyNodeIds = useStore((s) => s.dirtyNodeIds);
+  const deletedNotionTombstones = useStore((s) => s.deletedNotionTombstones);
+  const clearDeletedNotionTombstones = useStore((s) => s.clearDeletedNotionTombstones);
   const setAllowBackgroundSync = useStore((s) => s.setAllowBackgroundSync);
   const setUnsavedChangesResolve = useStore((s) => s.setUnsavedChangesResolve);
   const setManualSyncMode = useStore((s) => s.setManualSyncMode);
@@ -85,6 +96,7 @@ export const NotionSyncModal = () => {
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [syncLog, setSyncLog] = useState<string[]>([]);
   const [syncResult, setSyncResult] = useState<any>(null);
+  const deletedTombstoneCount = Object.keys(deletedNotionTombstones).length;
 
   useEffect(() => {
     if (isOpen) {
@@ -175,7 +187,7 @@ export const NotionSyncModal = () => {
   const handleDisconnect = (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    const hasUnsaved = notionDirty && dirtyNodeIds.size > 0;
+    const hasUnsaved = notionDirty || dirtyNodeIds.size > 0 || deletedTombstoneCount > 0;
     if (hasUnsaved) {
       if (sessionStorage.getItem('techtree_suppress_unsaved_prompt') === 'true') {
         performDisconnect();
@@ -245,7 +257,13 @@ export const NotionSyncModal = () => {
     if (!notionConfig) return;
     setAllowBackgroundSync(true);
     const dirty = dirtyNodeIds;
-    const totalToPush = dirty.size > 0 ? dirty.size : nodes.length;
+    const pendingDeletePageIds = Object.keys(deletedNotionTombstones);
+    const totalToPush =
+      dirty.size > 0
+        ? dirty.size
+        : pendingDeletePageIds.length > 0
+          ? pendingDeletePageIds.length
+          : nodes.length;
     setSyncInProgress(true);
     setSyncProgress({ current: 0, total: totalToPush });
     setSyncLog([]);
@@ -263,18 +281,51 @@ export const NotionSyncModal = () => {
           const kind = n.data?.notionPageId ? 'обновление' : 'создание';
           addLog(`  ${i + 1}. ${label} — ${kind}`);
         });
+      } else if (pendingDeletePageIds.length > 0) {
+        addLog(`Режим: архивирование ${pendingDeletePageIds.length} удалённых локально страниц в Notion.`);
       } else {
         addLog(`Режим: полная отправка всех ${nodes.length} узлов.`);
       }
-      addLog('Отправка в Notion...');
-      const result = await pushToNotion(
-        nodes,
-        edges,
-        notionConfig,
-        getEffectiveProxy(),
-        (current, total) => setSyncProgress({ current, total }),
-        dirty.size > 0 ? dirty : undefined
-      );
+      let result =
+        dirty.size > 0
+          ? await pushToNotion(
+              nodes,
+              edges,
+              notionConfig,
+              getEffectiveProxy(),
+              (current, total) => setSyncProgress({ current, total }),
+              dirty
+            )
+          : pendingDeletePageIds.length > 0
+            ? { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] as string[] }
+            : await pushToNotion(
+                nodes,
+                edges,
+                notionConfig,
+                getEffectiveProxy(),
+                (current, total) => setSyncProgress({ current, total }),
+                undefined
+              );
+
+      if (pendingDeletePageIds.length > 0) {
+        addLog(`Архивирование страниц в Notion: ${pendingDeletePageIds.length} шт...`);
+        const archived = await archiveNotionPages(
+          pendingDeletePageIds,
+          notionConfig,
+          getEffectiveProxy()
+        );
+        if (archived.archivedIds.length > 0) {
+          clearDeletedNotionTombstones(archived.archivedIds);
+          result.deleted += archived.archivedIds.length;
+          addLog(`Заархивировано в Notion: ${archived.archivedIds.length}.`);
+        }
+        if (archived.errors.length > 0) {
+          result.errors.push(...archived.errors);
+          addLog('Ошибки архивирования:');
+          archived.errors.forEach((e) => addLog(`  • ${e}`));
+        }
+      }
+
       addLog(`Результат: создано ${result.added}, обновлено ${result.updated}.`);
       if (result.errors.length > 0) {
         addLog('Ошибки:');
@@ -284,7 +335,7 @@ export const NotionSyncModal = () => {
       setLastSyncResult(result);
       setLastSyncTime(new Date().toISOString());
       setLastSyncError(null);
-      setNotionDirty(false);
+      setNotionDirty(result.errors.length > 0);
       setNotionHasRemoteUpdates(false);
       clearDirtyNodes();
       addLog('Push завершён.');
@@ -304,7 +355,7 @@ export const NotionSyncModal = () => {
     try {
       addLog('--- Проверка отличий ---');
       addLog('Шаг 1: проверка по времени последнего изменения в Notion...');
-      const { hasUpdates, lastEditedTime } = await checkForNotionUpdates(
+      const { hasUpdates } = await checkForNotionUpdates(
         notionConfig,
         lastSyncTime,
         getEffectiveProxy()
@@ -369,13 +420,33 @@ export const NotionSyncModal = () => {
       addLog('--- Двусторонняя синхронизация ---');
       addLog(`Локально: ${nodes.length} узлов, ${edges.length} связей. lastSyncTime: ${lastSyncTime ? new Date(lastSyncTime).toLocaleString() : 'нет'}.`);
       addLog('Загрузка изменений из Notion и мерж (новее по времени побеждает)...');
+      const pendingDeletePageIds = Object.keys(deletedNotionTombstones);
       const { mergedNodes, mergedEdges, result, notionFieldColors } = await bidirectionalSync(
         nodes,
         edges,
         notionConfig,
         getEffectiveProxy(),
-        lastSyncTime
+        lastSyncTime,
+        { ignoreNotionPageIds: new Set(pendingDeletePageIds) }
       );
+      if (pendingDeletePageIds.length > 0) {
+        addLog(`Архивирование удалённых локально страниц в Notion: ${pendingDeletePageIds.length} шт...`);
+        const archived = await archiveNotionPages(
+          pendingDeletePageIds,
+          notionConfig,
+          getEffectiveProxy()
+        );
+        if (archived.archivedIds.length > 0) {
+          clearDeletedNotionTombstones(archived.archivedIds);
+          result.deleted += archived.archivedIds.length;
+          addLog(`Заархивировано в Notion: ${archived.archivedIds.length}.`);
+        }
+        if (archived.errors.length > 0) {
+          result.errors.push(...archived.errors);
+          addLog('Ошибки архивирования:');
+          archived.errors.forEach((e) => addLog(`  • ${e}`));
+        }
+      }
       addLog(`Мерж: добавлено из Notion ${result.added} узлов, обновлено данными из Notion ${result.updated} узлов (остальные — локальная версия).`);
       addLog(`Итого после мержа: ${mergedNodes.length} узлов, ${mergedEdges.length} связей.`);
 
@@ -390,6 +461,7 @@ export const NotionSyncModal = () => {
       setLastSyncResult(result);
       setLastSyncTime(new Date().toISOString());
       setNotionHasRemoteUpdates(false);
+      setNotionDirty(result.errors.length > 0);
       addLog('Двусторонняя синхронизация завершена.');
     } catch (err: unknown) {
       const msg = formatNotionError(err);
@@ -628,6 +700,11 @@ export const NotionSyncModal = () => {
                     Нет локальных изменений
                   </span>
                 )}
+                {deletedTombstoneCount > 0 && (
+                  <span className="text-xs bg-amber-500/15 border border-amber-500/40 text-amber-300 px-2 py-1 rounded-control">
+                    {deletedTombstoneCount} удалений ожидают архивирования в Notion
+                  </span>
+                )}
                 {notionHasRemoteUpdates && (
                   <span className="text-xs bg-accent/15 border border-accent/40 text-accent px-2 py-1 rounded-control">
                     Есть обновления в Notion
@@ -663,9 +740,11 @@ export const NotionSyncModal = () => {
                 <button
                   type="button"
                   onClick={handlePush}
-                  disabled={syncInProgress || nodes.length === 0}
+                  disabled={syncInProgress || (nodes.length === 0 && deletedTombstoneCount === 0)}
                   className={`flex items-center p-3 border-2 rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left ${
-                    dirtyNodeIds.size > 0 ? 'border-amber-500/60' : 'border-control-border'
+                    dirtyNodeIds.size > 0 || deletedTombstoneCount > 0
+                      ? 'border-amber-500/60'
+                      : 'border-control-border'
                   }`}
                 >
                   <Upload size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />

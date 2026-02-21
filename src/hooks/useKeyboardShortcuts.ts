@@ -65,7 +65,10 @@ export const useKeyboardShortcuts = () => {
         const state = useStore.getState();
         const hasUnsaved =
           state.offlineDirty ||
-          (state.notionConnected && state.notionDirty && state.dirtyNodeIds.size > 0);
+          (state.notionConnected &&
+            (state.notionDirty ||
+              state.dirtyNodeIds.size > 0 ||
+              Object.keys(state.deletedNotionTombstones).length > 0));
         const doOpen = () => {
           openProject().then((result) => {
             if (result) {

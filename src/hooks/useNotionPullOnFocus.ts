@@ -47,7 +47,11 @@ export const useNotionPullOnFocus = () => {
           useStore.getState().setNotionHasRemoteUpdates(true);
           // Auto-pull only if notionSourceOfTruth is enabled and no local dirty nodes
           const current = useStore.getState();
-          if ((current.syncMode === 'pull' || current.syncMode === 'bidirectional') && current.dirtyNodeIds.size === 0) {
+          if (
+            (current.syncMode === 'pull' || current.syncMode === 'bidirectional') &&
+            current.dirtyNodeIds.size === 0 &&
+            Object.keys(current.deletedNotionTombstones).length === 0
+          ) {
             doPullRef.current();
           }
         }
