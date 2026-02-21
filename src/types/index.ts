@@ -330,6 +330,14 @@ export interface ProjectMeta {
 /** Notion field value → hex color (from Notion select/status options) */
 export type NotionFieldColors = Record<string, Record<string, string>>;
 
+/** Local deletion marker for a Notion page that should be archived on next sync */
+export interface DeletedNotionTombstone {
+  notionPageId: string;
+  deletedAt: string;
+  nodeLabel?: string;
+  techCraftId?: string;
+}
+
 export interface ProjectFile {
   version: string;
   meta: ProjectMeta;
@@ -337,4 +345,5 @@ export interface ProjectFile {
   nodes: TechNode[];
   edges: TechEdge[];
   notionFieldColors?: NotionFieldColors;
+  deletedNotionTombstones?: Record<string, DeletedNotionTombstone>;
 }

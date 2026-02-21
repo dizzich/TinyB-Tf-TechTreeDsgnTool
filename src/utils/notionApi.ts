@@ -1343,6 +1343,47 @@ export const pushToNotion = async (
   return result;
 };
 
+export const archiveNotionPages = async (
+  pageIds: Iterable<string>,
+  config: NotionConfig,
+  corsProxy?: string,
+  onProgress?: (current: number, total: number) => void
+): Promise<{ archivedIds: string[]; errors: string[] }> => {
+  const unique = Array.from(
+    new Set(
+      Array.from(pageIds).filter((pageId): pageId is string => typeof pageId === 'string' && pageId.length > 0)
+    )
+  );
+  if (unique.length === 0) return { archivedIds: [], errors: [] };
+
+  const options: NotionApiOptions = { apiKey: config.apiKey, corsProxy };
+  const archivedIds: string[] = [];
+  const errors: string[] = [];
+
+  const tasks = unique.map((pageId, index) => async () => {
+    try {
+      await notionFetch(`/pages/${pageId}`, options, {
+        method: 'PATCH',
+        body: JSON.stringify({ archived: true }),
+      });
+      archivedIds.push(pageId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Treat missing/already-removed pages as already archived (idempotent behavior).
+      if (msg.includes('Notion API error 404')) {
+        archivedIds.push(pageId);
+      } else {
+        errors.push(`${pageId}: ${msg}`);
+      }
+    } finally {
+      onProgress?.(index + 1, unique.length);
+    }
+  });
+
+  await parallelLimit(tasks, PUSH_CONCURRENCY);
+  return { archivedIds, errors };
+};
+
 /** Build a single Notion property for PATCH (partial update) */
 function buildSingleNotionProperty(
   field: string,
@@ -1456,7 +1497,10 @@ export const bidirectionalSync = async (
   localEdges: TechEdge[],
   config: NotionConfig,
   corsProxy?: string,
-  lastSyncTime?: string | null
+  lastSyncTime?: string | null,
+  options?: {
+    ignoreNotionPageIds?: Set<string>;
+  }
 ): Promise<{
   mergedNodes: TechNode[];
   mergedEdges: TechEdge[];
@@ -1483,9 +1527,14 @@ export const bidirectionalSync = async (
 
   const remoteByTechCraftId = new Map<string, TechNode>();
   const remoteByNotionPageId = new Map<string, TechNode>();
+  const ignorePageIds = options?.ignoreNotionPageIds ?? new Set<string>();
+  const ignoredRemoteNodeIds = new Set<string>();
   remote.nodes.forEach(n => {
     if (n.data.techCraftId) remoteByTechCraftId.set(n.data.techCraftId, n);
     if (n.data.notionPageId) remoteByNotionPageId.set(n.data.notionPageId, n);
+    if (n.data.notionPageId && ignorePageIds.has(n.data.notionPageId)) {
+      ignoredRemoteNodeIds.add(n.id);
+    }
   });
 
   const mergedNodes: TechNode[] = [];
@@ -1513,6 +1562,9 @@ export const bidirectionalSync = async (
   // Add remote-only nodes (new from Notion)
   for (const remoteNode of remote.nodes) {
     if (!processedRemoteIds.has(remoteNode.id)) {
+      if (remoteNode.data.notionPageId && ignorePageIds.has(remoteNode.data.notionPageId)) {
+        continue;
+      }
       // Check if already added by a different key
       const alreadyAdded = mergedNodes.some(n =>
         n.data.notionPageId === remoteNode.data.notionPageId ||
@@ -1526,10 +1578,21 @@ export const bidirectionalSync = async (
   }
 
   // Merge edges: combine local and remote, deduplicate
-  const allEdges = [...localEdges, ...remote.edges];
-  const mergedEdges = allEdges.filter((edge, i, self) =>
-    i === self.findIndex(t => t.source === edge.source && t.target === edge.target)
-  );
+  const allowedNodeIds = new Set(mergedNodes.map((n) => n.id));
+  const allEdges = [
+    ...localEdges,
+    ...remote.edges.filter(
+      (edge) =>
+        !ignoredRemoteNodeIds.has(edge.source) &&
+        !ignoredRemoteNodeIds.has(edge.target)
+    ),
+  ];
+  const mergedEdges = allEdges
+    .filter(
+      (edge, i, self) =>
+        i === self.findIndex((t) => t.source === edge.source && t.target === edge.target)
+    )
+    .filter((edge) => allowedNodeIds.has(edge.source) && allowedNodeIds.has(edge.target));
 
   return { mergedNodes, mergedEdges, result, notionFieldColors: remote.notionFieldColors || {} };
 };

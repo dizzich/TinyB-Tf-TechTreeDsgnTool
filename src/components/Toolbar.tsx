@@ -59,6 +59,7 @@ export const Toolbar = () => {
   const meta = useStore((state) => state.meta);
   const settings = useStore((state) => state.settings);
   const notionFieldColors = useStore((state) => state.notionFieldColors);
+  const deletedNotionTombstones = useStore((state) => state.deletedNotionTombstones);
 
   const setNodes = useStore((state) => state.setNodes);
   const setEdges = useStore((state) => state.setEdges);
@@ -236,6 +237,8 @@ export const Toolbar = () => {
       nodes,
       edges,
       notionFieldColors: Object.keys(notionFieldColors).length > 0 ? notionFieldColors : undefined,
+      deletedNotionTombstones:
+        Object.keys(deletedNotionTombstones).length > 0 ? deletedNotionTombstones : undefined,
     };
     await saveProject(projectData);
     setOfflineDirty(false);

@@ -10,7 +10,18 @@ import {
   OnEdgesChange,
   OnConnect,
 } from '@xyflow/react';
-import { TechNode, TechEdge, ProjectMeta, ProjectSettings, NotionConfig, SyncResult, DEFAULT_NODE_COLOR_PALETTE, CanvasFilter, EdgeWaypoint } from '../types';
+import {
+  TechNode,
+  TechEdge,
+  ProjectMeta,
+  ProjectSettings,
+  NotionConfig,
+  SyncResult,
+  DEFAULT_NODE_COLOR_PALETTE,
+  CanvasFilter,
+  EdgeWaypoint,
+  DeletedNotionTombstone,
+} from '../types';
 import { snapPositionToObjects, snapToGrid } from '../utils/snapToGrid';
 
 const HISTORY_LIMIT = 50;
@@ -57,6 +68,7 @@ interface AppState {
   notionDirty: boolean;
   notionHasRemoteUpdates: boolean;
   dirtyNodeIds: Set<string>;
+  deletedNotionTombstones: Record<string, DeletedNotionTombstone>;
   syncJustCompleted: boolean;
   notionFieldColors: Record<string, Record<string, string>>;
 
@@ -141,6 +153,11 @@ interface AppState {
   setNotionHasRemoteUpdates: (has: boolean) => void;
   markNodesDirty: (ids: string[]) => void;
   clearDirtyNodes: () => void;
+  addDeletedNotionTombstones: (
+    entries: DeletedNotionTombstone[] | Record<string, DeletedNotionTombstone>
+  ) => void;
+  clearDeletedNotionTombstones: (pageIds: string[]) => void;
+  pruneDeletedNotionTombstonesByNodes: (nodes: TechNode[]) => void;
   setSyncJustCompleted: (value: boolean) => void;
 
   /** Update all waypoints for an edge. skipSnapshot=true during drag to avoid spamming history. */
@@ -257,6 +274,24 @@ const persistLastSyncTime = (databaseId: string | undefined, time: string | null
 
 const nowIso = () => new Date().toISOString();
 
+const pruneDeletedTombstonesByNodes = (
+  tombstones: Record<string, DeletedNotionTombstone>,
+  nodes: TechNode[]
+): Record<string, DeletedNotionTombstone> => {
+  if (Object.keys(tombstones).length === 0) return tombstones;
+  const restoredPageIds = new Set(
+    nodes
+      .map((n) => n.data.notionPageId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+  );
+  if (restoredPageIds.size === 0) return tombstones;
+  const next: Record<string, DeletedNotionTombstone> = {};
+  for (const [pageId, tombstone] of Object.entries(tombstones)) {
+    if (!restoredPageIds.has(pageId)) next[pageId] = tombstone;
+  }
+  return next;
+};
+
 // Suppresses creating a history entry when ReactFlow echoes position change after undo/redo.
 let _restoringHistory = false;
 
@@ -275,13 +310,20 @@ export const useStore = create<AppState>()((set, get) => ({
   },
 
   undo: () => {
-    const { _history, nodes, edges } = get();
+    const { _history, nodes, edges, deletedNotionTombstones } = get();
     if (_history.past.length === 0) return;
     _restoringHistory = true;
     const prev = _history.past[_history.past.length - 1];
     const past = _history.past.slice(0, -1);
     const future = [cloneSnapshot(nodes, edges), ..._history.future];
-    set({ nodes: prev.nodes, edges: prev.edges, _history: { past, future }, offlineDirty: true });
+    const pruned = pruneDeletedTombstonesByNodes(deletedNotionTombstones, prev.nodes);
+    set({
+      nodes: prev.nodes,
+      edges: prev.edges,
+      deletedNotionTombstones: pruned,
+      _history: { past, future },
+      offlineDirty: true,
+    });
     const changedIds = new Set<string>();
     prev.nodes.forEach((n) => changedIds.add(n.id));
     nodes.forEach((n) => changedIds.add(n.id));
@@ -291,13 +333,20 @@ export const useStore = create<AppState>()((set, get) => ({
   },
 
   redo: () => {
-    const { _history, nodes, edges } = get();
+    const { _history, nodes, edges, deletedNotionTombstones } = get();
     if (_history.future.length === 0) return;
     _restoringHistory = true;
     const next = _history.future[0];
     const past = [..._history.past, cloneSnapshot(nodes, edges)].slice(-HISTORY_LIMIT);
     const future = _history.future.slice(1);
-    set({ nodes: next.nodes, edges: next.edges, _history: { past, future }, offlineDirty: true });
+    const pruned = pruneDeletedTombstonesByNodes(deletedNotionTombstones, next.nodes);
+    set({
+      nodes: next.nodes,
+      edges: next.edges,
+      deletedNotionTombstones: pruned,
+      _history: { past, future },
+      offlineDirty: true,
+    });
     const changedIds = new Set<string>();
     next.nodes.forEach((n) => changedIds.add(n.id));
     nodes.forEach((n) => changedIds.add(n.id));
@@ -328,6 +377,7 @@ export const useStore = create<AppState>()((set, get) => ({
       notionDirty: false,
       notionHasRemoteUpdates: false,
       dirtyNodeIds: new Set<string>(),
+      deletedNotionTombstones: {},
       syncJustCompleted: false,
       notionFieldColors: {},
 
@@ -532,11 +582,15 @@ export const useStore = create<AppState>()((set, get) => ({
         });
       },
 
-      setNodes: (nodes) => set({ nodes }),
+      setNodes: (nodes) => {
+        const pruned = pruneDeletedTombstonesByNodes(get().deletedNotionTombstones, nodes);
+        set({ nodes, deletedNotionTombstones: pruned });
+      },
       setEdges: (edges) => set({ edges }),
       replaceNodesAndEdgesForSync: (nodes, edges, notionFieldColors, replaceColors = false) => {
         get().clearHistory();
         let nextColors = get().notionFieldColors;
+        const pruned = pruneDeletedTombstonesByNodes(get().deletedNotionTombstones, nodes);
         if (notionFieldColors && Object.keys(notionFieldColors).length > 0) {
           nextColors = replaceColors
             ? notionFieldColors
@@ -551,6 +605,7 @@ export const useStore = create<AppState>()((set, get) => ({
         set({
           nodes: [...nodes],
           edges: [...edges],
+          deletedNotionTombstones: pruned,
           syncJustCompleted: true,
           dirtyNodeIds: new Set<string>(),
           ...(notionFieldColors ? { notionFieldColors: nextColors } : {}),
@@ -565,16 +620,38 @@ export const useStore = create<AppState>()((set, get) => ({
           ...node,
           data: { ...node.data, localModifiedAt: nowIso() },
         };
-        set({ nodes: [...get().nodes, nodeWithTs], dirtyNodeIds: next, offlineDirty: true });
+        const nextNodes = [...get().nodes, nodeWithTs];
+        const pruned = pruneDeletedTombstonesByNodes(get().deletedNotionTombstones, nextNodes);
+        set({
+          nodes: nextNodes,
+          deletedNotionTombstones: pruned,
+          dirtyNodeIds: next,
+          offlineDirty: true,
+        });
       },
 
       deleteNodes: (nodeIds) => {
         get()._pushSnapshot();
+        const currentNodes = get().nodes;
+        const toDelete = currentNodes.filter((node) => nodeIds.includes(node.id));
+        const nextTombstones = { ...get().deletedNotionTombstones };
+        const deletedAt = nowIso();
+        for (const node of toDelete) {
+          const notionPageId = node.data.notionPageId;
+          if (!notionPageId) continue;
+          nextTombstones[notionPageId] = {
+            notionPageId,
+            deletedAt,
+            nodeLabel: node.data.label,
+            techCraftId: node.data.techCraftId,
+          };
+        }
         set({
-          nodes: get().nodes.filter((node) => !nodeIds.includes(node.id)),
+          nodes: currentNodes.filter((node) => !nodeIds.includes(node.id)),
           edges: get().edges.filter(
             (edge) => !nodeIds.includes(edge.source) && !nodeIds.includes(edge.target)
           ),
+          deletedNotionTombstones: nextTombstones,
           offlineDirty: true,
         });
       },
@@ -602,12 +679,19 @@ export const useStore = create<AppState>()((set, get) => ({
       loadProject: (project) => {
         get().clearHistory();
         const loadedSettings = project.settings || {};
+        const loadedNodes = project.nodes || [];
+        const loadedTombstones = (project.deletedNotionTombstones || {}) as Record<
+          string,
+          DeletedNotionTombstone
+        >;
+        const pruned = pruneDeletedTombstonesByNodes(loadedTombstones, loadedNodes);
         const state = get();
         state.setSyncMode('pause');
         state.setAllowBackgroundSync(false);
         set({
-          nodes: project.nodes || [],
+          nodes: loadedNodes,
           edges: project.edges || [],
+          deletedNotionTombstones: pruned,
           meta: project.meta || defaultMeta,
           settings: { ...defaultSettings, ...loadedSettings },
           notionFieldColors: project.notionFieldColors || {},
@@ -669,6 +753,41 @@ export const useStore = create<AppState>()((set, get) => ({
         set({ dirtyNodeIds: next, nodes: newNodes });
       },
       clearDirtyNodes: () => set({ dirtyNodeIds: new Set<string>() }),
+      addDeletedNotionTombstones: (entries) => {
+        const next = { ...get().deletedNotionTombstones };
+        if (Array.isArray(entries)) {
+          for (const entry of entries) {
+            if (!entry?.notionPageId) continue;
+            next[entry.notionPageId] = entry;
+          }
+        } else {
+          for (const [pageId, entry] of Object.entries(entries || {})) {
+            if (!pageId) continue;
+            next[pageId] = entry;
+          }
+        }
+        set({ deletedNotionTombstones: next, offlineDirty: true });
+      },
+      clearDeletedNotionTombstones: (pageIds) => {
+        if (!pageIds || pageIds.length === 0) return;
+        const next = { ...get().deletedNotionTombstones };
+        let changed = false;
+        for (const pageId of pageIds) {
+          if (!next[pageId]) continue;
+          delete next[pageId];
+          changed = true;
+        }
+        if (!changed) return;
+        set({ deletedNotionTombstones: next, offlineDirty: true });
+      },
+      pruneDeletedNotionTombstonesByNodes: (nodes) => {
+        const current = get().deletedNotionTombstones;
+        const pruned = pruneDeletedTombstonesByNodes(current, nodes);
+        if (pruned === current) return;
+        const sameSize = Object.keys(pruned).length === Object.keys(current).length;
+        if (sameSize) return;
+        set({ deletedNotionTombstones: pruned });
+      },
       setSyncJustCompleted: (value) => set({ syncJustCompleted: value }),
 
       updateEdgeWaypoints: (edgeId, waypoints, skipSnapshot = false) => {
