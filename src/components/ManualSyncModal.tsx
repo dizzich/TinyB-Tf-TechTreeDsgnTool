@@ -17,6 +17,7 @@ import {
   computeSyncDiffs,
   pushNodePropertyToNotion,
   DIFF_FIELD_LABELS,
+  NOTION_BUILTIN_PROXY,
 } from '../utils/notionApi';
 import { getLayoutedElements } from '../utils/autoLayout';
 import { SyncDiffItem, SyncConflict, TechNode } from '../types';
