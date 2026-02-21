@@ -5,14 +5,14 @@
  * The user provides their Integration Token and Database ID.
  *
  * Flow:
- * 1. Pull: Read all pages from Notion DB → convert to TechNodes + TechEdges
- * 2. Push: Convert local nodes/edges → update/create pages in Notion DB
+ * 1. Pull: Read all pages from Notion DB â†’ convert to TechNodes + TechEdges
+ * 2. Push: Convert local nodes/edges â†’ update/create pages in Notion DB
  * 3. Bidirectional: Compare timestamps, resolve conflicts
  */
 
 import { TechNode, TechEdge, NotionConfig, SyncResult, NodeData, SyncDiffItem, NotionColumnMapping } from '../types';
 
-// Notion API base URL — we use a lightweight CORS proxy approach.
+// Notion API base URL â€” we use a lightweight CORS proxy approach.
 // In production, this should be a backend proxy or Notion's official proxy.
 // For local dev, users can use a CORS proxy or a small server.
 const NOTION_API_VERSION = '2022-06-28';
@@ -59,7 +59,7 @@ const notionFetch = async (
     options.corsProxy === NOTION_BUILTIN_PROXY ||
     proxyVal.replace(/\/+$/, '').endsWith('/api/notion')
   ) {
-    // Built-in Vite dev proxy — always use relative path so the browser
+    // Built-in Vite dev proxy â€” always use relative path so the browser
     // sends the request to the same origin and Vite middleware intercepts it.
     baseUrl = '/api/notion';
   } else if (proxyVal) {
@@ -237,7 +237,7 @@ const getTitleText = (titleProp: any): string => {
   return getPlainText(titleProp.title);
 };
 
-/** Notion named colors → hex (for select/status chips) */
+/** Notion named colors â†’ hex (for select/status chips) */
 const NOTION_COLOR_TO_HEX: Record<string, string> = {
   default: '#9ca3af',
   gray: '#9ca3af',
@@ -430,7 +430,7 @@ const applyLineDataToEdges = (
   }
 };
 
-/** Resolve openCondition from page props: rich_text, formula, relation (with id→title map), rollup (all values), select, status, title */
+/** Resolve openCondition from page props: rich_text, formula, relation (with idâ†’title map), rollup (all values), select, status, title */
 function resolveOpenCondition(
   prop: any,
   relationIdToTitle?: Map<string, string>
@@ -553,7 +553,7 @@ export const notionPageToNodeData = (
   return { notionPageId: page.id, data, position };
 };
 
-/** Field keys we use in NodeData → Notion column mapping keys */
+/** Field keys we use in NodeData â†’ Notion column mapping keys */
 const FIELD_TO_COLUMN: Record<string, string> = {
   act: 'act',
   techForAct: 'act',
@@ -619,7 +619,7 @@ export function buildNotionFieldColors(
 
 const OPEN_CONDITION_FETCH_BATCH_SIZE = 10;
 
-/** Collect all unique relation IDs from a relation column and fetch their page titles. Returns id → title map. */
+/** Collect all unique relation IDs from a relation column and fetch their page titles. Returns id â†’ title map. */
 async function fetchRelationIdToTitle(
   pages: any[],
   columnName: string | undefined,
@@ -645,7 +645,7 @@ async function fetchRelationIdToTitle(
   return map;
 }
 
-/** Collect all unique relation IDs from openCondition props and fetch their page titles. Returns id → title map. */
+/** Collect all unique relation IDs from openCondition props and fetch their page titles. Returns id â†’ title map. */
 async function fetchOpenConditionRelationIdToTitle(
   pages: any[],
   config: NotionConfig,
@@ -654,7 +654,7 @@ async function fetchOpenConditionRelationIdToTitle(
   return fetchRelationIdToTitle(pages, config.columnMapping.openCondition, options);
 }
 
-/** Collect all unique relation IDs from UsedCraftStation props and fetch their page titles. Returns id → title map. */
+/** Collect all unique relation IDs from UsedCraftStation props and fetch their page titles. Returns id â†’ title map. */
 async function fetchUsedCraftStationRelationIdToTitle(
   pages: any[],
   config: NotionConfig,
@@ -663,7 +663,7 @@ async function fetchUsedCraftStationRelationIdToTitle(
   return fetchRelationIdToTitle(pages, config.columnMapping.usedCraftStation, options);
 }
 
-/** Collect all unique relation IDs from UsedStation props and fetch their page titles. Returns id → title map. */
+/** Collect all unique relation IDs from UsedStation props and fetch their page titles. Returns id â†’ title map. */
 async function fetchUsedStationRelationIdToTitle(
   pages: any[],
   config: NotionConfig,
@@ -691,8 +691,8 @@ export const pullFromNotion = async (
   const edges: TechEdge[] = [];
 
   // First pass: create nodes and build ID maps
-  const pageIdToNodeId = new Map<string, string>(); // Notion page ID → node ID
-  const techCraftIdToNodeId = new Map<string, string>(); // TechCraftID → node ID
+  const pageIdToNodeId = new Map<string, string>(); // Notion page ID â†’ node ID
+  const techCraftIdToNodeId = new Map<string, string>(); // TechCraftID â†’ node ID
 
   pages.forEach((page, index) => {
     const { notionPageId, data, position } = notionPageToNodeData(page, config, relationIdToTitle, relationIdToTitleUsedCraftStation, relationIdToTitleUsedStation);
@@ -930,6 +930,8 @@ export const DIFF_FIELD_LABELS: Record<string, string> = {
   techForAct: 'Акт',
   stage: 'Стадия',
   category: 'Категория',
+  incomingLinks: 'Входящие связи',
+  outgoingLinks: 'Исходящие связи',
   powerType: 'Тип питания',
   gameStatus: 'Статус в игре',
   designStatus: 'Статус дизайна',
@@ -947,11 +949,41 @@ const norm = (v: unknown): string => {
   return String(v).trim();
 };
 
+const nodeToken = (node: TechNode): string => {
+  if (node.data.notionPageId) return `p:${node.data.notionPageId}`;
+  if (node.data.techCraftId) return `t:${node.data.techCraftId}`;
+  return `i:${node.id}`;
+};
+
+const collectNeighborTokens = (
+  node: TechNode,
+  edges: TechEdge[],
+  nodeMapById: Map<string, TechNode>,
+  direction: 'incoming' | 'outgoing'
+): string[] => {
+  const rel = edges.filter((e) =>
+    direction === 'incoming' ? e.target === node.id : e.source === node.id
+  );
+  const tokens = rel
+    .map((e) => (direction === 'incoming' ? nodeMapById.get(e.source) : nodeMapById.get(e.target)))
+    .filter(Boolean)
+    .map((n) => nodeToken(n as TechNode));
+  return Array.from(new Set(tokens)).sort();
+};
+
+const tokensToLabels = (
+  tokens: string[],
+  localLabelByToken: Map<string, string>,
+  remoteLabelByToken: Map<string, string>
+): string[] =>
+  tokens.map((t) => localLabelByToken.get(t) || remoteLabelByToken.get(t) || t);
 /** Compare local and remote nodes, return list of per-field diffs for manual sync UI */
 export const computeSyncDiffs = (
   localNodes: TechNode[],
   remoteNodes: TechNode[],
-  _columnMapping: NotionColumnMapping
+  _columnMapping: NotionColumnMapping,
+  localEdges: TechEdge[] = [],
+  remoteEdges: TechEdge[] = []
 ): SyncDiffItem[] => {
   const diffs: SyncDiffItem[] = [];
   const remoteByPageId = new Map(remoteNodes.map((n) => [n.data.notionPageId!, n]));
@@ -962,6 +994,10 @@ export const computeSyncDiffs = (
   const localByTechCraftId = new Map(
     localNodes.filter((n) => n.data.techCraftId).map((n) => [n.data.techCraftId!, n])
   );
+  const localById = new Map(localNodes.map((n) => [n.id, n]));
+  const remoteById = new Map(remoteNodes.map((n) => [n.id, n]));
+  const localLabelByToken = new Map(localNodes.map((n) => [nodeToken(n), n.data.label || n.id]));
+  const remoteLabelByToken = new Map(remoteNodes.map((n) => [nodeToken(n), n.data.label || n.id]));
 
   for (const local of localNodes) {
     const remote = local.data.notionPageId
@@ -986,6 +1022,8 @@ export const computeSyncDiffs = (
         } else if (key === 'openCondition') {
           localVal = local.data.openCondition ?? '';
           remoteVal = remote.data.openCondition ?? '';
+        } else if (key === 'incomingLinks' || key === 'outgoingLinks') {
+          continue;
         } else {
           localVal = (local.data as any)[key];
           remoteVal = (remote.data as any)[key];
@@ -1002,6 +1040,37 @@ export const computeSyncDiffs = (
             kind: 'both',
           });
         }
+      }
+
+      const localIncomingTokens = collectNeighborTokens(local, localEdges, localById, 'incoming');
+      const localOutgoingTokens = collectNeighborTokens(local, localEdges, localById, 'outgoing');
+      const remoteIncomingTokens = collectNeighborTokens(remote, remoteEdges, remoteById, 'incoming');
+      const remoteOutgoingTokens = collectNeighborTokens(remote, remoteEdges, remoteById, 'outgoing');
+
+      if (norm(localIncomingTokens) !== norm(remoteIncomingTokens)) {
+        diffs.push({
+          nodeId: local.id,
+          nodeLabel: local.data.label || local.id,
+          notionPageId: local.data.notionPageId,
+          field: 'incomingLinks',
+          fieldLabel: DIFF_FIELD_LABELS.incomingLinks,
+          localValue: tokensToLabels(localIncomingTokens, localLabelByToken, remoteLabelByToken),
+          remoteValue: tokensToLabels(remoteIncomingTokens, localLabelByToken, remoteLabelByToken),
+          kind: 'both',
+        });
+      }
+
+      if (norm(localOutgoingTokens) !== norm(remoteOutgoingTokens)) {
+        diffs.push({
+          nodeId: local.id,
+          nodeLabel: local.data.label || local.id,
+          notionPageId: local.data.notionPageId,
+          field: 'outgoingLinks',
+          fieldLabel: DIFF_FIELD_LABELS.outgoingLinks,
+          localValue: tokensToLabels(localOutgoingTokens, localLabelByToken, remoteLabelByToken),
+          remoteValue: tokensToLabels(remoteOutgoingTokens, localLabelByToken, remoteLabelByToken),
+          kind: 'both',
+        });
       }
     } else if (local.data.notionPageId || local.data.techCraftId) {
       diffs.push({
@@ -1039,7 +1108,6 @@ export const computeSyncDiffs = (
 
   return diffs;
 };
-
 /** Run async tasks with a concurrency limit (e.g. 3 parallel Notion API calls) */
 const parallelLimit = async <T>(
   tasks: (() => Promise<T>)[],
@@ -1104,7 +1172,7 @@ const buildNotionProperties = (
   if (data.notionSyncStatus) {
     props[cm.notionSyncStatus] = { status: { name: data.notionSyncStatus } };
   }
-  // OpenCondition: Notion type "relation" — build from openConditionRefs (pageId or resolve by name via nodeMap)
+  // OpenCondition: Notion type "relation" â€” build from openConditionRefs (pageId or resolve by name via nodeMap)
   if (cm.openCondition && data.openConditionRefs?.length) {
     const openConditionRelation = data.openConditionRefs
       .map((ref) => {
@@ -1119,7 +1187,7 @@ const buildNotionProperties = (
     }
   }
 
-  // UsedCraftStation: Notion type "relation" — build from usedCraftStationRefs
+  // UsedCraftStation: Notion type "relation" â€” build from usedCraftStationRefs
   if (cm.usedCraftStation && data.usedCraftStationRefs?.length) {
     const usedCraftStationRelation = data.usedCraftStationRefs
       .map((ref) => {
@@ -1134,7 +1202,7 @@ const buildNotionProperties = (
     }
   }
 
-  // UsedStation: Notion type "relation" — build from usedStations
+  // UsedStation: Notion type "relation" â€” build from usedStations
   if (cm.usedStation && data.usedStations?.length) {
     const usedStationRelation = data.usedStations
       .map((ref) => {
@@ -1149,7 +1217,7 @@ const buildNotionProperties = (
     }
   }
 
-  // Relations: PrevTechs — O(1) lookups via nodeMap
+  // Relations: PrevTechs â€” O(1) lookups via nodeMap
   const incomingEdges = edges.filter(e => e.target === nodeId);
   const prevRelations = incomingEdges
     .map(e => nodeMap.get(e.source)?.data?.notionPageId)
@@ -1160,7 +1228,7 @@ const buildNotionProperties = (
     props[cm.prevTechs] = { relation: prevRelations };
   }
 
-  // Relations: NextTechs — O(1) lookups via nodeMap
+  // Relations: NextTechs â€” O(1) lookups via nodeMap
   const outgoingEdges = edges.filter(e => e.source === nodeId);
   const nextRelations = outgoingEdges
     .map(e => nodeMap.get(e.target)?.data?.notionPageId)
@@ -1171,7 +1239,7 @@ const buildNotionProperties = (
     props[cm.nextTechs] = { relation: nextRelations };
   }
 
-  // EditorPosition — store node coordinates as JSON
+  // EditorPosition â€” store node coordinates as JSON
   if (cm.editorPosition && position) {
     props[cm.editorPosition] = {
       rich_text: [{
@@ -1182,7 +1250,7 @@ const buildNotionProperties = (
     };
   }
 
-  // LineData — serialize outgoing edge waypoints/pathType as JSON
+  // LineData â€” serialize outgoing edge waypoints/pathType as JSON
   if (cm.lineData) {
     const lineDataObj: Record<string, { waypoints?: { x: number; y: number }[]; pathType?: string }> = {};
     for (const edge of outgoingEdges) {
@@ -1210,7 +1278,7 @@ const toSet = (ids: Set<string> | string[] | undefined): Set<string> | undefined
   return ids.length > 0 ? new Set(ids) : undefined;
 };
 
-/** Push local nodes to Notion — create new or update existing pages (parallelized).
+/** Push local nodes to Notion â€” create new or update existing pages (parallelized).
  * When dirtyNodeIds is provided and non-empty, only pushes those nodes (incremental).
  * When dirtyNodeIds is empty, no-op. When not provided, full push. */
 export const pushToNotion = async (
@@ -1280,7 +1348,6 @@ function buildSingleNotionProperty(
   field: string,
   value: unknown,
   config: NotionConfig,
-  node?: TechNode,
   nodeMap?: Map<string, TechNode>,
   edges?: TechEdge[],
   nodeId?: string
@@ -1307,6 +1374,24 @@ function buildSingleNotionProperty(
   if (field === 'gameStatus' && cm.gameStatus) return { [cm.gameStatus]: { status: { name: strVal } } };
   if (field === 'designStatus' && cm.designStatus) return { [cm.designStatus]: { status: { name: strVal } } };
   if (field === 'notionSyncStatus' && cm.notionSyncStatus) return { [cm.notionSyncStatus]: { status: { name: strVal } } };
+  if ((field === 'incomingLinks' || field === 'outgoingLinks') && nodeMap && edges && nodeId) {
+    if (field === 'incomingLinks' && cm.prevTechs) {
+      const incomingRelations = edges
+        .filter((e) => e.target === nodeId)
+        .map((e) => nodeMap.get(e.source)?.data?.notionPageId)
+        .filter(Boolean)
+        .map((pageId) => ({ id: pageId as string }));
+      return { [cm.prevTechs]: { relation: incomingRelations } };
+    }
+    if (field === 'outgoingLinks' && cm.nextTechs) {
+      const outgoingRelations = edges
+        .filter((e) => e.source === nodeId)
+        .map((e) => nodeMap.get(e.target)?.data?.notionPageId)
+        .filter(Boolean)
+        .map((pageId) => ({ id: pageId as string }));
+      return { [cm.nextTechs]: { relation: outgoingRelations } };
+    }
+  }
   return null;
 }
 
@@ -1325,7 +1410,6 @@ export const pushNodePropertyToNotion = async (
     field,
     value,
     config,
-    node,
     nodeMap,
     edges,
     node?.id
@@ -1421,7 +1505,7 @@ export const bidirectionalSync = async (
       mergedNodes.push(merged);
       result.updated++;
     } else {
-      // Only exists locally — keep it
+      // Only exists locally â€” keep it
       mergedNodes.push(localNode);
     }
   }
