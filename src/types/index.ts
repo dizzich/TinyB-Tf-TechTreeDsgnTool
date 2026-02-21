@@ -85,6 +85,8 @@ export interface NodeData {
   updatedAt?: string;
   /** Last modified in editor (ISO). Used for sync to decide push. */
   localModifiedAt?: string;
+  /** When position was last changed (local drag or received from remote). For field-level merge. */
+  positionModifiedAt?: string;
 
   // Custom fields for template engine
   [key: string]: any;
@@ -189,6 +191,23 @@ export interface SyncConflict {
   remoteValue: any;
   resolvedTo?: 'local' | 'remote';
 }
+
+/** Single diff when comparing graph and Notion */
+export interface SyncDiffItem {
+  nodeId: string;
+  nodeLabel: string;
+  notionPageId?: string;
+  /** position | label | act | stage | category | powerType | ... */
+  field: string;
+  fieldLabel: string;
+  localValue: unknown;
+  remoteValue: unknown;
+  /** 'both' = in both sides, 'localOnly' = only local, 'remoteOnly' = only in Notion */
+  kind: 'both' | 'localOnly' | 'remoteOnly';
+}
+
+/** ManualSyncModal open mode */
+export type ManualSyncMode = 'diff' | 'conflicts';
 
 export interface ImportMapping {
   idColumn: string;

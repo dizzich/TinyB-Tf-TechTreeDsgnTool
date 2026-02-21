@@ -10,7 +10,7 @@
  * 3. Bidirectional: Compare timestamps, resolve conflicts
  */
 
-import { TechNode, TechEdge, NotionConfig, SyncResult, NodeData } from '../types';
+import { TechNode, TechEdge, NotionConfig, SyncResult, NodeData, SyncDiffItem, NotionColumnMapping } from '../types';
 
 // Notion API base URL — we use a lightweight CORS proxy approach.
 // In production, this should be a backend proxy or Notion's official proxy.
@@ -547,6 +547,7 @@ export const notionPageToNodeData = (
       : {}),
     createdAt: page.created_time,
     updatedAt: page.last_edited_time,
+    positionModifiedAt: page.last_edited_time,
   };
 
   return { notionPageId: page.id, data, position };
@@ -906,7 +907,7 @@ export const pullFromNotionIncremental = async (
             n.data.notionPageId === pulled.data.notionPageId ||
             (n.data.techCraftId && n.data.techCraftId === pulled.data.techCraftId)
         );
-        if (local) return { ...pulled, position: local.position };
+        if (local) return mergeNodeFieldLevel(local, pulled, lastSyncTime);
         return pulled;
       })
     );
@@ -920,6 +921,123 @@ export const pullFromNotionIncremental = async (
   );
 
   return { nodes: mergedNodes, edges: mergedEdges, notionFieldColors: pulledColors };
+};
+
+/** Field keys and display labels for diff comparison */
+export const DIFF_FIELD_LABELS: Record<string, string> = {
+  position: 'Позиция',
+  label: 'Название',
+  techForAct: 'Акт',
+  stage: 'Стадия',
+  category: 'Категория',
+  powerType: 'Тип питания',
+  gameStatus: 'Статус в игре',
+  designStatus: 'Статус дизайна',
+  notionSyncStatus: 'Статус Notion',
+  openCondition: 'Условие открытия',
+};
+const DIFF_FIELDS: { key: string; label: string }[] = Object.entries(DIFF_FIELD_LABELS).map(([key, label]) => ({
+  key,
+  label,
+}));
+
+const norm = (v: unknown): string => {
+  if (v == null) return '';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v).trim();
+};
+
+/** Compare local and remote nodes, return list of per-field diffs for manual sync UI */
+export const computeSyncDiffs = (
+  localNodes: TechNode[],
+  remoteNodes: TechNode[],
+  _columnMapping: NotionColumnMapping
+): SyncDiffItem[] => {
+  const diffs: SyncDiffItem[] = [];
+  const remoteByPageId = new Map(remoteNodes.map((n) => [n.data.notionPageId!, n]));
+  const remoteByTechCraftId = new Map(
+    remoteNodes.filter((n) => n.data.techCraftId).map((n) => [n.data.techCraftId!, n])
+  );
+  const localByPageId = new Map(localNodes.filter((n) => n.data.notionPageId).map((n) => [n.data.notionPageId!, n]));
+  const localByTechCraftId = new Map(
+    localNodes.filter((n) => n.data.techCraftId).map((n) => [n.data.techCraftId!, n])
+  );
+
+  for (const local of localNodes) {
+    const remote = local.data.notionPageId
+      ? remoteByPageId.get(local.data.notionPageId)
+      : local.data.techCraftId
+        ? remoteByTechCraftId.get(local.data.techCraftId)
+        : undefined;
+
+    if (remote) {
+      for (const { key, label } of DIFF_FIELDS) {
+        let localVal: unknown;
+        let remoteVal: unknown;
+        if (key === 'position') {
+          localVal = local.position;
+          remoteVal = remote.position;
+        } else if (key === 'label') {
+          localVal = local.data.label;
+          remoteVal = remote.data.label;
+        } else if (key === 'techForAct') {
+          localVal = local.data.techForAct ?? local.data.act;
+          remoteVal = remote.data.techForAct ?? remote.data.act;
+        } else if (key === 'openCondition') {
+          localVal = local.data.openCondition ?? '';
+          remoteVal = remote.data.openCondition ?? '';
+        } else {
+          localVal = (local.data as any)[key];
+          remoteVal = (remote.data as any)[key];
+        }
+        if (norm(localVal) !== norm(remoteVal)) {
+          diffs.push({
+            nodeId: local.id,
+            nodeLabel: local.data.label || local.id,
+            notionPageId: local.data.notionPageId,
+            field: key,
+            fieldLabel: label,
+            localValue: localVal,
+            remoteValue: remoteVal,
+            kind: 'both',
+          });
+        }
+      }
+    } else if (local.data.notionPageId || local.data.techCraftId) {
+      diffs.push({
+        nodeId: local.id,
+        nodeLabel: local.data.label || local.id,
+        notionPageId: local.data.notionPageId,
+        field: '_node',
+        fieldLabel: 'Нода (только локально)',
+        localValue: local,
+        remoteValue: null,
+        kind: 'localOnly',
+      });
+    }
+  }
+
+  for (const remote of remoteNodes) {
+    const local = remote.data.notionPageId
+      ? localByPageId.get(remote.data.notionPageId)
+      : remote.data.techCraftId
+        ? localByTechCraftId.get(remote.data.techCraftId)
+        : undefined;
+    if (!local) {
+      diffs.push({
+        nodeId: remote.id,
+        nodeLabel: remote.data.label || remote.id,
+        notionPageId: remote.data.notionPageId,
+        field: '_node',
+        fieldLabel: 'Нода (только в Notion)',
+        localValue: null,
+        remoteValue: remote,
+        kind: 'remoteOnly',
+      });
+    }
+  }
+
+  return diffs;
 };
 
 /** Run async tasks with a concurrency limit (e.g. 3 parallel Notion API calls) */
@@ -1157,6 +1275,97 @@ export const pushToNotion = async (
   return result;
 };
 
+/** Build a single Notion property for PATCH (partial update) */
+function buildSingleNotionProperty(
+  field: string,
+  value: unknown,
+  config: NotionConfig,
+  node?: TechNode,
+  nodeMap?: Map<string, TechNode>,
+  edges?: TechEdge[],
+  nodeId?: string
+): Record<string, unknown> | null {
+  const cm = config.columnMapping;
+  if (field === 'position') {
+    const pos = value as { x: number; y: number };
+    if (!cm.editorPosition || !pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return null;
+    return {
+      [cm.editorPosition]: {
+        rich_text: [{ text: { content: JSON.stringify({ x: Math.round(pos.x), y: Math.round(pos.y) }) } }],
+      },
+    };
+  }
+  if (field === 'label') {
+    if (!cm.workingName) return null;
+    return { [cm.workingName]: { title: [{ text: { content: String(value ?? '') } }] } };
+  }
+  const strVal = value != null ? String(value) : '';
+  if (field === 'techForAct' && cm.act) return { [cm.act]: { select: { name: strVal } } };
+  if (field === 'stage' && cm.stage) return { [cm.stage]: { select: { name: strVal } } };
+  if (field === 'category' && cm.category) return { [cm.category]: { select: { name: strVal } } };
+  if (field === 'powerType' && cm.powerType) return { [cm.powerType]: { select: { name: strVal } } };
+  if (field === 'gameStatus' && cm.gameStatus) return { [cm.gameStatus]: { status: { name: strVal } } };
+  if (field === 'designStatus' && cm.designStatus) return { [cm.designStatus]: { status: { name: strVal } } };
+  if (field === 'notionSyncStatus' && cm.notionSyncStatus) return { [cm.notionSyncStatus]: { status: { name: strVal } } };
+  return null;
+}
+
+/** Patch a single property of a Notion page. Returns updated page or throws. */
+export const pushNodePropertyToNotion = async (
+  pageId: string,
+  field: string,
+  value: unknown,
+  config: NotionConfig,
+  corsProxy?: string,
+  node?: TechNode,
+  nodeMap?: Map<string, TechNode>,
+  edges?: TechEdge[]
+): Promise<void> => {
+  const props = buildSingleNotionProperty(
+    field,
+    value,
+    config,
+    node,
+    nodeMap,
+    edges,
+    node?.id
+  );
+  if (!props || Object.keys(props).length === 0) {
+    throw new Error(`Cannot push field "${field}" to Notion`);
+  }
+  const options: NotionApiOptions = { apiKey: config.apiKey, corsProxy };
+  await notionFetch(`/pages/${pageId}`, options, {
+    method: 'PATCH',
+    body: JSON.stringify({ properties: props }),
+  });
+};
+
+/** Field-level merge: take position/data from whichever was modified after lastSyncTime. */
+const mergeNodeFieldLevel = (
+  local: TechNode,
+  remote: TechNode,
+  lastSyncTime: string | null | undefined
+): TechNode => {
+  const cutoff = lastSyncTime || '1970-01-01T00:00:00Z';
+  const cutoffMs = new Date(cutoff).getTime();
+
+  const useLocalPosition =
+    new Date(local.data.positionModifiedAt || 0).getTime() > cutoffMs;
+  const useLocalData =
+    new Date(local.data.localModifiedAt || 0).getTime() > cutoffMs;
+
+  const position = useLocalPosition ? local.position : remote.position;
+  const data: NodeData = useLocalData
+    ? { ...local.data, notionPageId: remote.data.notionPageId || local.data.notionPageId }
+    : { ...remote.data, notionPageId: remote.data.notionPageId || local.data.notionPageId };
+
+  return {
+    ...local,
+    position,
+    data,
+  };
+};
+
 /** Bidirectional sync: pull remote, compare with local, resolve conflicts */
 export const bidirectionalSync = async (
   localNodes: TechNode[],
@@ -1208,28 +1417,9 @@ export const bidirectionalSync = async (
 
     if (remoteNode) {
       processedRemoteIds.add(remoteNode.id);
-
-      // Compare timestamps — newer wins (use localModifiedAt when set so local edits win)
-      const localUpdated = new Date(localNode.data.updatedAt || 0).getTime();
-      const localModified = new Date(localNode.data.localModifiedAt || 0).getTime();
-      const localTime = Math.max(localUpdated, localModified);
-      const remoteTime = new Date(remoteNode.data.updatedAt || 0).getTime();
-
-      if (remoteTime > localTime) {
-        // Remote is newer — take remote data but keep local position
-        mergedNodes.push({
-          ...localNode,
-          data: {
-            ...remoteNode.data,
-            // Preserve local-only fields
-            notionPageId: remoteNode.data.notionPageId || localNode.data.notionPageId,
-          },
-        });
-        result.updated++;
-      } else {
-        // Local is newer or same — keep local
-        mergedNodes.push(localNode);
-      }
+      const merged = mergeNodeFieldLevel(localNode, remoteNode, lastSyncTime);
+      mergedNodes.push(merged);
+      result.updated++;
     } else {
       // Only exists locally — keep it
       mergedNodes.push(localNode);

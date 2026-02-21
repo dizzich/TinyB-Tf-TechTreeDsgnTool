@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, Download, Upload, CheckCircle, AlertCircle, Loader2, Unplug, Plug, RotateCcw, Pause } from 'lucide-react';
+import { X, RefreshCw, Download, Upload, CheckCircle, AlertCircle, Loader2, Unplug, Plug, RotateCcw, Pause, Hand } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { NotionConfig, NotionColumnMapping } from '../types';
 import { testNotionConnection, pullFromNotion, pullFromNotionIncremental, pushToNotion, bidirectionalSync, checkForNotionUpdates, NOTION_BUILTIN_PROXY } from '../utils/notionApi';
@@ -68,6 +68,7 @@ export const NotionSyncModal = () => {
   const dirtyNodeIds = useStore((s) => s.dirtyNodeIds);
   const setAllowBackgroundSync = useStore((s) => s.setAllowBackgroundSync);
   const setUnsavedChangesResolve = useStore((s) => s.setUnsavedChangesResolve);
+  const setManualSyncMode = useStore((s) => s.setManualSyncMode);
 
   const [step, setStep] = useState<Step>(notionConfig ? 'sync' : 'connect');
   const [apiKey, setApiKey] = useState(notionConfig?.apiKey || '');
@@ -684,6 +685,22 @@ export const NotionSyncModal = () => {
                   <div>
                     <div className="font-medium text-text text-sm">Двусторонне (новее побеждает)</div>
                     <div className="text-xs text-muted">Объединить: в каждой стороне берётся новее.</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualSyncMode('diff');
+                    setModalOpen('manualSync', true);
+                  }}
+                  disabled={syncInProgress}
+                  className="flex items-center p-3 border-2 border-control-border rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left"
+                >
+                  <Hand size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
+                  <div>
+                    <div className="font-medium text-text text-sm">МАНУАЛЬНЫЙ</div>
+                    <div className="text-xs text-muted">Список отличий, ручной выбор каждого изменения.</div>
                   </div>
                 </button>
 

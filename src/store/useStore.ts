@@ -87,7 +87,11 @@ interface AppState {
     notionSync: boolean;
     colorMapping: boolean;
     unsavedChanges: boolean;
+    manualSync: boolean;
   };
+  manualSyncMode: 'diff' | 'conflicts';
+  /** When mode is 'conflicts', use these instead of computed diffs */
+  manualSyncConflicts: import('../types').SyncConflict[];
 
   // Undo/redo (internal state not exposed; use canUndo/canRedo for UI)
   _history: { past: HistorySnapshot[]; future: HistorySnapshot[] };
@@ -147,7 +151,11 @@ interface AppState {
   setCanvasFilter: (filter: Partial<CanvasFilter>) => void;
   setConnectedSubgraphHighlight: (ids: { nodeIds: Set<string>; edgeIds: Set<string> } | null) => void;
 
-  setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync' | 'colorMapping' | 'unsavedChanges', isOpen: boolean) => void;
+  setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync' | 'colorMapping' | 'unsavedChanges' | 'manualSync', isOpen: boolean) => void;
+  setManualSyncMode: (mode: 'diff' | 'conflicts') => void;
+  setManualSyncConflicts: (conflicts: import('../types').SyncConflict[]) => void;
+  /** Apply a single remote field value to local graph node (for manual sync) */
+  applyRemoteFieldToGraph: (nodeId: string, field: string, value: unknown) => void;
   /** Force show StartupModal (e.g. from "Open new project" menu) */
   forceShowStartupModal: boolean;
   setForceShowStartupModal: (value: boolean) => void;
@@ -355,7 +363,10 @@ export const useStore = create<AppState>()((set, get) => ({
         notionSync: false,
         colorMapping: false,
         unsavedChanges: false,
+        manualSync: false,
       },
+      manualSyncMode: 'diff',
+      manualSyncConflicts: [],
 
       onNodeDragStart: (_event, node) => {
         get()._pushSnapshot();
@@ -460,7 +471,7 @@ export const useStore = create<AppState>()((set, get) => ({
           const ts = nowIso();
           const ids = new Set(dragEndIds);
           const nodesWithTs = newNodes.map((n) =>
-            ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+            ids.has(n.id) ? { ...n, data: { ...n.data, positionModifiedAt: ts } } : n
           );
           const next = new Set(get().dirtyNodeIds);
           dragEndIds.forEach((id) => next.add(id));
@@ -648,7 +659,14 @@ export const useStore = create<AppState>()((set, get) => ({
       markNodesDirty: (ids) => {
         const next = new Set(get().dirtyNodeIds);
         ids.forEach((id) => next.add(id));
-        set({ dirtyNodeIds: next });
+        const ts = nowIso();
+        const idSet = new Set(ids);
+        const newNodes = get().nodes.map((n) =>
+          idSet.has(n.id)
+            ? { ...n, data: { ...n.data, localModifiedAt: ts, positionModifiedAt: ts } }
+            : n
+        );
+        set({ dirtyNodeIds: next, nodes: newNodes });
       },
       clearDirtyNodes: () => set({ dirtyNodeIds: new Set<string>() }),
       setSyncJustCompleted: (value) => set({ syncJustCompleted: value }),
@@ -725,6 +743,30 @@ export const useStore = create<AppState>()((set, get) => ({
       setConnectedSubgraphHighlight: (ids) => set({ connectedSubgraphHighlight: ids }),
 
       setModalOpen: (modal, isOpen) => set({ modals: { ...get().modals, [modal]: isOpen } }),
+      setManualSyncMode: (mode) => set({ manualSyncMode: mode }),
+      setManualSyncConflicts: (conflicts) => set({ manualSyncConflicts: conflicts }),
+      applyRemoteFieldToGraph: (nodeId, field, value) => {
+        get()._pushSnapshot();
+        const nodes = get().nodes;
+        const node = nodes.find((n) => n.id === nodeId);
+        if (!node) return;
+        if (field === 'position') {
+          const pos = value as { x: number; y: number };
+          if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+            const ts = nowIso();
+            const next = nodes.map((n) =>
+              n.id === nodeId
+                ? { ...n, position: { x: pos.x, y: pos.y }, data: { ...n.data, positionModifiedAt: ts } }
+                : n
+            );
+            const nextDirty = new Set(get().dirtyNodeIds);
+            nextDirty.add(nodeId);
+            set({ nodes: next, dirtyNodeIds: nextDirty, offlineDirty: true });
+          }
+        } else {
+          get().updateNodeData(nodeId, { [field]: value });
+        }
+      },
       forceShowStartupModal: false,
       setForceShowStartupModal: (value) => set({ forceShowStartupModal: value }),
       unsavedChangesResolve: null,
