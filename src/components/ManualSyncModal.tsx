@@ -186,6 +186,30 @@ const freshnessMeta: Record<
   },
 };
 
+const CATEGORY_FIELD_ORDER = [
+  'position',
+  'label',
+  'techForAct',
+  'stage',
+  'category',
+  'incomingLinks',
+  'outgoingLinks',
+  'powerType',
+  'gameStatus',
+  'designStatus',
+  'notionSyncStatus',
+  'openCondition',
+  '_node',
+] as const;
+
+const CATEGORY_FIELD_RANK: Record<string, number> = CATEGORY_FIELD_ORDER.reduce(
+  (acc, field, index) => {
+    acc[field] = index;
+    return acc;
+  },
+  {} as Record<string, number>
+);
+
 export const ManualSyncModal = () => {
   const isOpen = useStore((s) => s.modals.manualSync);
   const setModalOpen = useStore((s) => s.setModalOpen);
@@ -209,6 +233,8 @@ export const ManualSyncModal = () => {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [selectedDiffKeys, setSelectedDiffKeys] = useState<Set<string>>(new Set());
   const [batchSummary, setBatchSummary] = useState<BatchSummary | null>(null);
+  const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+  const categoryMenuRef = useRef<HTMLDivElement>(null);
 
   const getEffectiveProxy = (): string | undefined => {
     if (notionCorsProxy === NOTION_BUILTIN_PROXY) return NOTION_BUILTIN_PROXY;
@@ -218,9 +244,13 @@ export const ManualSyncModal = () => {
   };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setIsCategoryMenuOpen(false);
+      return;
+    }
     setSelectedDiffKeys(new Set());
     setBatchSummary(null);
+    setIsCategoryMenuOpen(false);
   }, [isOpen, manualSyncMode]);
 
   useEffect(() => {
@@ -293,6 +323,30 @@ export const ManualSyncModal = () => {
     });
   }, [diffs]);
 
+  useEffect(() => {
+    if (!isCategoryMenuOpen) return;
+
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (categoryMenuRef.current && target && !categoryMenuRef.current.contains(target)) {
+        setIsCategoryMenuOpen(false);
+      }
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsCategoryMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isCategoryMenuOpen]);
+
   const diffsByNode = useMemo(() => {
     const m = new Map<string, SyncDiffItem[]>();
     for (const d of diffs) {
@@ -302,6 +356,40 @@ export const ManualSyncModal = () => {
     }
     return m;
   }, [diffs]);
+
+  const categoryItems = useMemo(() => {
+    const categoryMap = new Map<
+      string,
+      { field: string; label: string; count: number; selectedCount: number }
+    >();
+
+    for (const d of diffs) {
+      const field = d.field;
+      const item = categoryMap.get(field);
+      const isDiffSelected = selectedDiffKeys.has(getDiffKey(d));
+      if (item) {
+        item.count += 1;
+        if (isDiffSelected) item.selectedCount += 1;
+        continue;
+      }
+
+      const label =
+        field === '_node' ? 'Нода целиком' : (DIFF_FIELD_LABELS[field] ?? d.fieldLabel ?? field);
+      categoryMap.set(field, {
+        field,
+        label,
+        count: 1,
+        selectedCount: isDiffSelected ? 1 : 0,
+      });
+    }
+
+    return Array.from(categoryMap.values()).sort((a, b) => {
+      const aRank = CATEGORY_FIELD_RANK[a.field] ?? Number.MAX_SAFE_INTEGER;
+      const bRank = CATEGORY_FIELD_RANK[b.field] ?? Number.MAX_SAFE_INTEGER;
+      if (aRank !== bRank) return aRank - bRank;
+      return a.label.localeCompare(b.label, 'ru');
+    });
+  }, [diffs, selectedDiffKeys]);
 
   const localNodesById = useMemo(
     () => new Map(nodes.map((n) => [n.id, n])),
@@ -373,6 +461,20 @@ export const ManualSyncModal = () => {
       else next.add(key);
       return next;
     });
+  };
+
+  const handleSelectCategory = (field: string) => {
+    const keys = diffs.filter((d) => d.field === field).map(getDiffKey);
+    if (keys.length === 0) {
+      setIsCategoryMenuOpen(false);
+      return;
+    }
+    setSelectedDiffKeys((prev) => {
+      const next = new Set(prev);
+      for (const key of keys) next.add(key);
+      return next;
+    });
+    setIsCategoryMenuOpen(false);
   };
 
   const setNodeSelected = (nodeId: string, checked: boolean) => {
@@ -1180,6 +1282,49 @@ export const ManualSyncModal = () => {
               >
                 Снять выделение
               </button>
+
+              <div className="relative" ref={categoryMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryMenuOpen((prev) => !prev)}
+                  disabled={!!applyingId || categoryItems.length === 0}
+                  aria-haspopup="menu"
+                  aria-expanded={isCategoryMenuOpen}
+                  className="px-3 py-1.5 text-xs rounded-control bg-control-bg border border-control-border text-text hover:bg-control-hover-bg disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  Выбрать по категории
+                  <ChevronDown
+                    size={14}
+                    strokeWidth={1.75}
+                    className={`transition-transform ${isCategoryMenuOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                {isCategoryMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 bottom-full mb-1 z-20 min-w-[240px] max-h-64 overflow-y-auto rounded-control border border-control-border bg-modal-bg shadow-modal p-1"
+                  >
+                    {categoryItems.map((item) => (
+                      <button
+                        key={item.field}
+                        type="button"
+                        onClick={() => handleSelectCategory(item.field)}
+                        className="w-full flex items-center justify-between gap-2 px-2.5 py-2 text-left rounded-small hover:bg-control-hover-bg"
+                      >
+                        <span className="text-xs text-text">
+                          {item.label} ({item.count})
+                        </span>
+                        <span className="text-[11px] text-muted">
+                          {item.selectedCount === item.count
+                            ? 'все выбраны'
+                            : `выбрано ${item.selectedCount}`}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <button
                 type="button"
