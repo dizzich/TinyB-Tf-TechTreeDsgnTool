@@ -82,7 +82,7 @@ function notionProxyPlugin() {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
-  base: command === 'build' ? './' : '/',
+  base: command === 'build' ? '/TechTree/' : '/',
   plugins: [notionProxyPlugin(), react()],
   resolve: {
     alias: {

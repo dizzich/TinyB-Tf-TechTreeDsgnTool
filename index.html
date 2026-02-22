@@ -10,13 +10,9 @@
         document.addEventListener('DOMContentLoaded', function() {
           document.body.innerHTML = '<div style="font-family:sans-serif;padding:2rem;max-width:500px;"><h1>TechTree Studio</h1><p>Откройте через <b>START.bat</b> (dev-сервер) или <b>OPEN.bat</b> (сборка + preview).</p><p>Приложения на ES-модулях не работают при прямом открытии (file://) из-за ограничений браузера.</p></div>';
         });
-      } else {
-        var s = document.createElement('script');
-        s.type = 'module';
-        s.src = '/src/main.tsx';
-        document.head.appendChild(s);
       }
     </script>
+    <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>
     <div id="root"></div>

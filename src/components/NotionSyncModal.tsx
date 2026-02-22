@@ -289,23 +289,23 @@ export const NotionSyncModal = () => {
       let result =
         dirty.size > 0
           ? await pushToNotion(
+            nodes,
+            edges,
+            notionConfig,
+            getEffectiveProxy(),
+            (current, total) => setSyncProgress({ current, total }),
+            dirty
+          )
+          : pendingDeletePageIds.length > 0
+            ? { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] as string[] }
+            : await pushToNotion(
               nodes,
               edges,
               notionConfig,
               getEffectiveProxy(),
               (current, total) => setSyncProgress({ current, total }),
-              dirty
-            )
-          : pendingDeletePageIds.length > 0
-            ? { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] as string[] }
-            : await pushToNotion(
-                nodes,
-                edges,
-                notionConfig,
-                getEffectiveProxy(),
-                (current, total) => setSyncProgress({ current, total }),
-                undefined
-              );
+              undefined
+            );
 
       if (pendingDeletePageIds.length > 0) {
         addLog(`Архивирование страниц в Notion: ${pendingDeletePageIds.length} шт...`);
@@ -722,79 +722,77 @@ export const NotionSyncModal = () => {
               <div className="space-y-3">
                 <h4 className="text-sm font-medium text-text">Разовые действия</h4>
                 <div className="grid grid-cols-1 gap-2">
-                <button
-                  type="button"
-                  onClick={handlePull}
-                  disabled={syncInProgress}
-                  className={`flex items-center p-3 border-2 rounded-control bg-control-bg-muted hover:bg-control-hover-bg transition disabled:opacity-50 text-left ${
-                    notionHasRemoteUpdates ? 'border-amber-500/60' : 'border-control-border'
-                  }`}
-                >
-                  <Download size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
-                  <div>
-                    <div className="font-medium text-text text-sm">Notion → Граф</div>
-                    <div className="text-xs text-muted">Загрузить изменения из Notion.</div>
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={handlePull}
+                    disabled={syncInProgress}
+                    className={`flex items-center p-3 border-2 rounded-control bg-control-bg-muted hover:bg-control-hover-bg transition disabled:opacity-50 text-left ${notionHasRemoteUpdates ? 'border-amber-500/60' : 'border-control-border'
+                      }`}
+                  >
+                    <Download size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
+                    <div>
+                      <div className="font-medium text-text text-sm">Notion → Граф</div>
+                      <div className="text-xs text-muted">Загрузить изменения из Notion.</div>
+                    </div>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={handlePush}
-                  disabled={syncInProgress || (nodes.length === 0 && deletedTombstoneCount === 0)}
-                  className={`flex items-center p-3 border-2 rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left ${
-                    dirtyNodeIds.size > 0 || deletedTombstoneCount > 0
-                      ? 'border-amber-500/60'
-                      : 'border-control-border'
-                  }`}
-                >
-                  <Upload size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
-                  <div>
-                    <div className="font-medium text-text text-sm">Граф → Notion</div>
-                    <div className="text-xs text-muted">Отправить изменения в Notion.</div>
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={handlePush}
+                    disabled={syncInProgress || (nodes.length === 0 && deletedTombstoneCount === 0)}
+                    className={`flex items-center p-3 border-2 rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left ${dirtyNodeIds.size > 0 || deletedTombstoneCount > 0
+                        ? 'border-amber-500/60'
+                        : 'border-control-border'
+                      }`}
+                  >
+                    <Upload size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
+                    <div>
+                      <div className="font-medium text-text text-sm">Граф → Notion</div>
+                      <div className="text-xs text-muted">Отправить изменения в Notion.</div>
+                    </div>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={handleBidirectional}
-                  disabled={syncInProgress}
-                  className="flex items-center p-3 border-2 border-control-border rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left"
-                >
-                  <RefreshCw size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
-                  <div>
-                    <div className="font-medium text-text text-sm">Двусторонне (новее побеждает)</div>
-                    <div className="text-xs text-muted">Объединить: в каждой стороне берётся новее.</div>
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleBidirectional}
+                    disabled={syncInProgress}
+                    className="flex items-center p-3 border-2 border-control-border rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left"
+                  >
+                    <RefreshCw size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
+                    <div>
+                      <div className="font-medium text-text text-sm">Двусторонне (новее побеждает)</div>
+                      <div className="text-xs text-muted">Объединить: в каждой стороне берётся новее.</div>
+                    </div>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManualSyncMode('diff');
-                    setModalOpen('manualSync', true);
-                  }}
-                  disabled={syncInProgress}
-                  className="flex items-center p-3 border-2 border-control-border rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left"
-                >
-                  <Hand size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
-                  <div>
-                    <div className="font-medium text-text text-sm">МАНУАЛЬНЫЙ</div>
-                    <div className="text-xs text-muted">Список отличий, ручной выбор каждого изменения.</div>
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualSyncMode('diff');
+                      setModalOpen('manualSync', true);
+                    }}
+                    disabled={syncInProgress}
+                    className="flex items-center p-3 border-2 border-control-border rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left"
+                  >
+                    <Hand size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
+                    <div>
+                      <div className="font-medium text-text text-sm">МАНУАЛЬНЫЙ</div>
+                      <div className="text-xs text-muted">Список отличий, ручной выбор каждого изменения.</div>
+                    </div>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={handleFullResetFromNotion}
-                  disabled={syncInProgress}
-                  className="flex items-center p-3 border-2 border-danger/30 rounded-control bg-control-bg-muted hover:border-danger/60 hover:bg-danger/5 transition disabled:opacity-50 text-left"
-                >
-                  <RotateCcw size={20} className="text-danger mr-3 flex-shrink-0" strokeWidth={1.75} />
-                  <div>
-                    <div className="font-medium text-text text-sm">Сброс из Notion</div>
-                    <div className="text-xs text-muted">Скачать всё из Notion, перезаписать граф (локальные изменения теряются).</div>
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleFullResetFromNotion}
+                    disabled={syncInProgress}
+                    className="flex items-center p-3 border-2 border-danger/30 rounded-control bg-control-bg-muted hover:border-danger/60 hover:bg-danger/5 transition disabled:opacity-50 text-left"
+                  >
+                    <RotateCcw size={20} className="text-danger mr-3 flex-shrink-0" strokeWidth={1.75} />
+                    <div>
+                      <div className="font-medium text-text text-sm">Сброс из Notion</div>
+                      <div className="text-xs text-muted">Скачать всё из Notion, перезаписать граф (локальные изменения теряются).</div>
+                    </div>
+                  </button>
                 </div>
               </div>
 
@@ -805,9 +803,8 @@ export const NotionSyncModal = () => {
                   <button
                     type="button"
                     onClick={() => setSyncMode('push')}
-                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${
-                      syncMode === 'push' ? 'border-accent bg-accent/15 text-accent' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
-                    }`}
+                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${syncMode === 'push' ? 'border-accent bg-accent/15 text-accent' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
+                      }`}
                   >
                     <Upload size={16} strokeWidth={1.75} />
                     <span className="text-sm">Граф → Notion</span>
@@ -815,9 +812,8 @@ export const NotionSyncModal = () => {
                   <button
                     type="button"
                     onClick={() => setSyncMode('pull')}
-                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${
-                      syncMode === 'pull' ? 'border-accent bg-accent/15 text-accent' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
-                    }`}
+                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${syncMode === 'pull' ? 'border-accent bg-accent/15 text-accent' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
+                      }`}
                   >
                     <Download size={16} strokeWidth={1.75} />
                     <span className="text-sm">Notion → Граф</span>
@@ -825,9 +821,8 @@ export const NotionSyncModal = () => {
                   <button
                     type="button"
                     onClick={() => setSyncMode('bidirectional')}
-                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${
-                      syncMode === 'bidirectional' ? 'border-accent bg-accent/15 text-accent' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
-                    }`}
+                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${syncMode === 'bidirectional' ? 'border-accent bg-accent/15 text-accent' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
+                      }`}
                   >
                     <RefreshCw size={16} strokeWidth={1.75} />
                     <span className="text-sm">Двусторонне</span>
@@ -835,9 +830,8 @@ export const NotionSyncModal = () => {
                   <button
                     type="button"
                     onClick={() => setSyncMode('pause')}
-                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${
-                      syncMode === 'pause' ? 'border-amber-500/50 bg-amber-500/15 text-amber-400' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
-                    }`}
+                    className={`flex items-center gap-2 p-2.5 rounded-control border text-left transition ${syncMode === 'pause' ? 'border-amber-500/50 bg-amber-500/15 text-amber-400' : 'border-control-border bg-control-bg-muted hover:bg-control-hover-bg text-muted hover:text-text'
+                      }`}
                   >
                     <Pause size={16} strokeWidth={1.75} />
                     <span className="text-sm">Пауза</span>
@@ -887,11 +881,10 @@ export const NotionSyncModal = () => {
 
               {syncResult && !syncInProgress && (
                 <div
-                  className={`border rounded-control p-4 ${
-                    syncResult.errors?.length > 0
+                  className={`border rounded-control p-4 ${syncResult.errors?.length > 0
                       ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
                       : 'bg-accent/20 border-accent/40 text-text'
-                  }`}
+                    }`}
                 >
                   <div className="text-sm space-y-1">
                     <div className="flex items-center">
