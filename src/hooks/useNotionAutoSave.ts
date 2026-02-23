@@ -94,13 +94,13 @@ export const useNotionAutoSave = () => {
         const pushResult =
           dirty.size > 0
             ? await pushToNotion(
-                nodes,
-                edges,
-                notionConfig,
-                proxy,
-                (current, total) => useStore.getState().setSyncProgress({ current, total }),
-                dirty
-              )
+              nodes,
+              edges,
+              notionConfig,
+              proxy,
+              (current, total) => useStore.getState().setSyncProgress({ current, total }),
+              dirty
+            )
             : { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] as string[] };
 
         if (pendingDeletePageIds.length > 0) {

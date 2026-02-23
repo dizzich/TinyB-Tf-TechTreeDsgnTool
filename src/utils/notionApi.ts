@@ -55,19 +55,18 @@ const notionFetch = async (
 
   let baseUrl: string;
   const proxyVal = options.corsProxy?.trim() ?? '';
-  if (
-    options.corsProxy === NOTION_BUILTIN_PROXY ||
-    proxyVal.replace(/\/+$/, '').endsWith('/api/notion')
-  ) {
-    // Built-in Vite dev proxy â€” always use relative path so the browser
-    // sends the request to the same origin and Vite middleware intercepts it.
+
+  if (proxyVal === NOTION_BUILTIN_PROXY || !proxyVal) {
+    // Default to built-in proxy if none specified or explicitly set to builtin.
+    // In dev: handled by Vite. In production: handled by Apache -> Node proxy.
     baseUrl = '/api/notion';
-  } else if (proxyVal) {
+  } else if (proxyVal.replace(/\/+$/, '').endsWith('/api/notion')) {
+    // Already points to the proxy endpoint
+    baseUrl = '/api/notion';
+  } else {
     // External CORS proxy: proxy URL + api.notion.com/v1 path.
     const proxy = proxyVal.replace(/\/+$/, '');
     baseUrl = `${proxy}/${NOTION_BASE.replace(/^https?:\/\//, '')}`;
-  } else {
-    baseUrl = NOTION_BASE;
   }
 
   const url = `${baseUrl}${path}`;
@@ -498,52 +497,52 @@ export const notionPageToNodeData = (
     notionSyncStatus: getSelectValue(props[cm.notionSyncStatus]) || getStatusValue(props[cm.notionSyncStatus]),
     ...(cm.openCondition
       ? (() => {
-          const prop = props[cm.openCondition];
-          const openCondition = resolveOpenCondition(prop, relationIdToTitle) || '';
-          const openConditionRefs =
-            relationIdToTitle && prop?.type === 'relation' && prop?.relation
-              ? getRelationIds(prop).map((id) => ({
-                  name: relationIdToTitle.get(id) ?? id,
-                  pageId: id,
-                }))
-              : undefined;
-          return {
-            openCondition,
-            ...(openConditionRefs?.length ? { openConditionRefs } : {}),
-          };
-        })()
+        const prop = props[cm.openCondition];
+        const openCondition = resolveOpenCondition(prop, relationIdToTitle) || '';
+        const openConditionRefs =
+          relationIdToTitle && prop?.type === 'relation' && prop?.relation
+            ? getRelationIds(prop).map((id) => ({
+              name: relationIdToTitle.get(id) ?? id,
+              pageId: id,
+            }))
+            : undefined;
+        return {
+          openCondition,
+          ...(openConditionRefs?.length ? { openConditionRefs } : {}),
+        };
+      })()
       : {}),
     ...(cm.usedCraftStation
       ? (() => {
-          const prop = props[cm.usedCraftStation];
-          const map = relationIdToTitleUsedCraftStation;
-          const refs =
-            map && prop?.type === 'relation' && prop?.relation
-              ? getRelationIds(prop).map((id) => ({
-                  name: map.get(id) ?? id,
-                  pageId: id,
-                }))
-              : undefined;
-          const str = refs?.map((r) => r.name).filter(Boolean).join(', ') || '';
-          return {
-            usedCraftStation: str || undefined,
-            ...(refs?.length ? { usedCraftStationRefs: refs } : {}),
-          };
-        })()
+        const prop = props[cm.usedCraftStation];
+        const map = relationIdToTitleUsedCraftStation;
+        const refs =
+          map && prop?.type === 'relation' && prop?.relation
+            ? getRelationIds(prop).map((id) => ({
+              name: map.get(id) ?? id,
+              pageId: id,
+            }))
+            : undefined;
+        const str = refs?.map((r) => r.name).filter(Boolean).join(', ') || '';
+        return {
+          usedCraftStation: str || undefined,
+          ...(refs?.length ? { usedCraftStationRefs: refs } : {}),
+        };
+      })()
       : {}),
     ...(cm.usedStation
       ? (() => {
-          const prop = props[cm.usedStation];
-          const map = relationIdToTitleUsedStation;
-          const refs =
-            map && prop?.type === 'relation' && prop?.relation
-              ? getRelationIds(prop).map((id) => ({
-                  name: map.get(id) ?? id,
-                  pageId: id,
-                }))
-              : undefined;
-          return refs?.length ? { usedStations: refs } : {};
-        })()
+        const prop = props[cm.usedStation];
+        const map = relationIdToTitleUsedStation;
+        const refs =
+          map && prop?.type === 'relation' && prop?.relation
+            ? getRelationIds(prop).map((id) => ({
+              name: map.get(id) ?? id,
+              pageId: id,
+            }))
+            : undefined;
+        return refs?.length ? { usedStations: refs } : {};
+      })()
       : {}),
     createdAt: page.created_time,
     updatedAt: page.last_edited_time,

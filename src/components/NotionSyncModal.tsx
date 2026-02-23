@@ -10,7 +10,6 @@ import {
   bidirectionalSync,
   checkForNotionUpdates,
   archiveNotionPages,
-  NOTION_BUILTIN_PROXY,
 } from '../utils/notionApi';
 import { getLayoutedElements } from '../utils/autoLayout';
 
@@ -103,11 +102,7 @@ export const NotionSyncModal = () => {
       setStep(notionConfig ? 'sync' : 'connect');
       setApiKey(notionConfig?.apiKey || '');
       setDatabaseId(notionConfig?.databaseId || '');
-      setCorsProxy(
-        import.meta.env.DEV && !notionCorsProxy?.trim()
-          ? NOTION_BUILTIN_PROXY
-          : (notionCorsProxy ?? '')
-      );
+      setCorsProxy(notionCorsProxy ?? '');
       const baseMapping = notionConfig?.columnMapping ?? {};
       const migrated = migrateColumnMapping(baseMapping);
       setMapping(notionConfig?.columnMapping ? { ...DEFAULT_COLUMN_MAPPING, ...migrated } : { ...DEFAULT_COLUMN_MAPPING });
@@ -118,10 +113,7 @@ export const NotionSyncModal = () => {
   }, [isOpen, notionConfig]);
 
   const getEffectiveProxy = (): string | undefined => {
-    if (corsProxy === NOTION_BUILTIN_PROXY) return NOTION_BUILTIN_PROXY;
-    if (corsProxy?.trim()) return corsProxy.trim();
-    if (import.meta.env.DEV) return NOTION_BUILTIN_PROXY;
-    return undefined;
+    return corsProxy?.trim() || undefined;
   };
 
   const formatNotionError = (err: unknown): string => {
@@ -515,7 +507,6 @@ export const NotionSyncModal = () => {
 
   if (!isOpen) return null;
 
-  const useBuiltInProxy = corsProxy === NOTION_BUILTIN_PROXY;
 
   const inputClass =
     'w-full border border-control-border rounded-control px-2.5 py-1.5 text-sm bg-control-bg text-text placeholder:text-muted focus:outline-none focus:border-accent';
@@ -604,38 +595,18 @@ export const NotionSyncModal = () => {
               </div>
 
               <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-text cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={useBuiltInProxy}
-                    onChange={(e) => setCorsProxy(e.target.checked ? NOTION_BUILTIN_PROXY : '')}
-                    className="w-4 h-4 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
-                  />
-                  Use built-in proxy (dev only)
-                </label>
-                <p className="text-xs text-muted mb-2 mt-1">
-                  When running with <code className="bg-control-bg-muted px-1 rounded-small text-text">npm run dev</code>, the app proxies requests to Notion so you don&apos;t need an external CORS proxy.
+                <label className={labelClass}>CORS Proxy (опционально)</label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  placeholder="https://your-cors-proxy.com/"
+                  value={corsProxy}
+                  onChange={(e) => setCorsProxy(e.target.value)}
+                />
+                <p className="text-xs text-muted mt-1">
+                  По умолчанию используется встроенный прокси <code className="bg-control-bg-muted px-1 rounded-small text-text">/api/notion</code>.
+                  Укажите адрес внешнего прокси, только если встроенный не работает.
                 </p>
-                {!useBuiltInProxy && (
-                  <>
-                    <label className={labelClass}>CORS Proxy (опционально)</label>
-                    <input
-                      type="text"
-                      className={inputClass}
-                      placeholder="https://your-cors-proxy.com/"
-                      value={corsProxy}
-                      onChange={(e) => setCorsProxy(e.target.value)}
-                    />
-                    <p className="text-xs text-muted mt-1">
-                      Notion API не поддерживает CORS из браузера. Укажите адрес прокси-сервера или включите встроенный прокси выше.
-                    </p>
-                    {import.meta.env.DEV && (
-                      <p className="text-xs text-muted mt-1">
-                        В режиме dev при пустом поле используется встроенный прокси.
-                      </p>
-                    )}
-                  </>
-                )}
               </div>
 
               {testError && (
@@ -741,8 +712,8 @@ export const NotionSyncModal = () => {
                     onClick={handlePush}
                     disabled={syncInProgress || (nodes.length === 0 && deletedTombstoneCount === 0)}
                     className={`flex items-center p-3 border-2 rounded-control bg-control-bg-muted hover:border-accent hover:bg-control-hover-bg transition disabled:opacity-50 text-left ${dirtyNodeIds.size > 0 || deletedTombstoneCount > 0
-                        ? 'border-amber-500/60'
-                        : 'border-control-border'
+                      ? 'border-amber-500/60'
+                      : 'border-control-border'
                       }`}
                   >
                     <Upload size={20} className="text-accent mr-3 flex-shrink-0" strokeWidth={1.75} />
@@ -882,8 +853,8 @@ export const NotionSyncModal = () => {
               {syncResult && !syncInProgress && (
                 <div
                   className={`border rounded-control p-4 ${syncResult.errors?.length > 0
-                      ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
-                      : 'bg-accent/20 border-accent/40 text-text'
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                    : 'bg-accent/20 border-accent/40 text-text'
                     }`}
                 >
                   <div className="text-sm space-y-1">

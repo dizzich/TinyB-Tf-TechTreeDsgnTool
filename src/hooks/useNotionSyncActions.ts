@@ -52,23 +52,23 @@ export const useNotionSyncActions = () => {
       const result =
         dirty.size > 0
           ? await pushToNotion(
+            nodes,
+            edges,
+            notionConfig,
+            proxy,
+            (current, total) => setSyncProgress({ current, total }),
+            dirty
+          )
+          : pendingDeletePageIds.length > 0
+            ? { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] as string[] }
+            : await pushToNotion(
               nodes,
               edges,
               notionConfig,
               proxy,
               (current, total) => setSyncProgress({ current, total }),
-              dirty
-            )
-          : pendingDeletePageIds.length > 0
-            ? { added: 0, updated: 0, deleted: 0, conflicts: [], errors: [] as string[] }
-            : await pushToNotion(
-                nodes,
-                edges,
-                notionConfig,
-                proxy,
-                (current, total) => setSyncProgress({ current, total }),
-                undefined
-              );
+              undefined
+            );
 
       if (pendingDeletePageIds.length > 0) {
         const archived = await archiveNotionPages(pendingDeletePageIds, notionConfig, proxy);
