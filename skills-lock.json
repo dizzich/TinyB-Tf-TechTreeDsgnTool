@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "canvas": {
+      "source": "markdown-viewer/skills",
+      "sourceType": "github",
+      "computedHash": "cb03e458ae53b58fb56c742edde46b3faa24cb3995e68c7ad451e21d94af02f1"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "computedHash": "25872a21881a950edc3db1f3329664d60405d539660ce05b3265db2de06a7dfd"
+    },
+    "reactflow-custom-nodes": {
+      "source": "thebushidocollective/han",
+      "sourceType": "github",
+      "computedHash": "7ebe18b68c0cfa999b2eff40f8c22740b4feb07e535e2558213cb9d7097e138e"
+    },
+    "reactflow-fundamentals": {
+      "source": "thebushidocollective/han",
+      "sourceType": "github",
+      "computedHash": "bc09c94662a96d75f272152ab600e935fd100268dbc0f8b8e17086f24144d02b"
+    }
+  }
+}
