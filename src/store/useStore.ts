@@ -211,6 +211,10 @@ const defaultSettings: ProjectSettings = {
   glassEffectEnabled: true,
   glassEffectModifier: 1.2,
   hideUnconnectedNodes: false,
+  bgPatternVariant: 'dots',
+  bgPatternLinkedToSnap: true,
+  bgPatternGap: 20,
+  bgPatternSize: 1,
 };
 
 const defaultMeta: ProjectMeta = {

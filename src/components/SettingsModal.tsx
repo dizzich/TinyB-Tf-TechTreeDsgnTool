@@ -115,11 +115,10 @@ export const SettingsModal = () => {
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={`px-6 py-3 font-medium text-sm transition-colors whitespace-nowrap ${
-                activeTab === tab
-                  ? 'border-b-2 border-accent text-accent'
-                  : 'text-muted hover:text-text'
-              }`}
+              className={`px-6 py-3 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === tab
+                ? 'border-b-2 border-accent text-accent'
+                : 'text-muted hover:text-text'
+                }`}
             >
               {tabNames[tab]}
             </button>
@@ -197,11 +196,10 @@ export const SettingsModal = () => {
                   <button
                     type="button"
                     onClick={() => setLocalTheme('dark')}
-                    className={`p-4 border rounded-control flex flex-col items-center gap-2 transition-all ${
-                      localTheme === 'dark'
-                        ? 'bg-panel border-accent shadow-[0_0_10px_rgba(106,162,255,0.2)]'
-                        : 'bg-control-bg border-control-border hover:border-control-hover-border'
-                    }`}
+                    className={`p-4 border rounded-control flex flex-col items-center gap-2 transition-all ${localTheme === 'dark'
+                      ? 'bg-panel border-accent shadow-[0_0_10px_rgba(106,162,255,0.2)]'
+                      : 'bg-control-bg border-control-border hover:border-control-hover-border'
+                      }`}
                   >
                     <div className="w-full h-12 bg-[#15171c] rounded border border-[#2c3340] relative overflow-hidden">
                       <div className="absolute top-2 left-2 w-8 h-2 bg-[#6aa2ff] rounded-sm"></div>
@@ -214,11 +212,10 @@ export const SettingsModal = () => {
                   <button
                     type="button"
                     onClick={() => setLocalTheme('light')}
-                    className={`p-4 border rounded-control flex flex-col items-center gap-2 transition-all ${
-                      localTheme === 'light'
-                        ? 'bg-white border-accent shadow-[0_0_10px_rgba(56,103,214,0.2)]'
-                        : 'bg-gray-100 border-gray-300 hover:border-gray-400'
-                    }`}
+                    className={`p-4 border rounded-control flex flex-col items-center gap-2 transition-all ${localTheme === 'light'
+                      ? 'bg-white border-accent shadow-[0_0_10px_rgba(56,103,214,0.2)]'
+                      : 'bg-gray-100 border-gray-300 hover:border-gray-400'
+                      }`}
                   >
                     <div className="w-full h-12 bg-[#f5f7fb] rounded border border-[#d7dee8] relative overflow-hidden">
                       <div className="absolute top-2 left-2 w-8 h-2 bg-[#3867d6] rounded-sm"></div>
@@ -266,6 +263,82 @@ export const SettingsModal = () => {
                     className="w-full h-2 bg-control-bg-muted rounded-full appearance-none cursor-pointer accent-accent disabled:cursor-not-allowed"
                   />
                   <p className="mt-1 text-xs text-muted">50% — сильнее, 250% — слабее. По умолчанию 120%.</p>
+                </div>
+              </div>
+
+              <div className="border-t border-panel-border pt-4">
+                <h3 className="text-sm font-medium text-text mb-3">Паттерн-сетка полотна</h3>
+                <div className="mb-4">
+                  <label className={labelClass}>Вид паттерна</label>
+                  <select
+                    value={localSettings.bgPatternVariant ?? 'dots'}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        bgPatternVariant: e.target.value as 'dots' | 'lines' | 'cross',
+                      })
+                    }
+                    className={inputClass}
+                  >
+                    <option value="dots">Точки</option>
+                    <option value="lines">Линии (сетка)</option>
+                    <option value="cross">Крестики (квадратная сетка)</option>
+                  </select>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer text-text hover:text-accent transition-colors mb-4">
+                  <input
+                    type="checkbox"
+                    checked={localSettings.bgPatternLinkedToSnap !== false}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        bgPatternLinkedToSnap: e.target.checked,
+                      })
+                    }
+                    className="w-4 h-4 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
+                  />
+                  <span>Привязать шаг к сетке привязки (snap: {localSettings.snapGridSize ?? 8}px)</span>
+                </label>
+                <div className={`mb-4${localSettings.bgPatternLinkedToSnap !== false ? ' opacity-50 pointer-events-none' : ''}`}>
+                  <label className={labelClass}>
+                    Шаг сетки ({localSettings.bgPatternGap ?? 20}px)
+                  </label>
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={1}
+                    value={localSettings.bgPatternGap ?? 20}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        bgPatternGap: parseInt(e.target.value, 10),
+                      })
+                    }
+                    disabled={localSettings.bgPatternLinkedToSnap !== false}
+                    className="w-full h-2 bg-control-bg-muted rounded-full appearance-none cursor-pointer accent-accent disabled:cursor-not-allowed"
+                  />
+                  <p className="mt-1 text-xs text-muted">Чем меньше — тем чаще сетка. По умолчанию 20px.</p>
+                </div>
+                <div>
+                  <label className={labelClass}>
+                    Размер элемента ({localSettings.bgPatternSize ?? 1}px)
+                  </label>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={4}
+                    step={0.5}
+                    value={localSettings.bgPatternSize ?? 1}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        bgPatternSize: parseFloat(e.target.value),
+                      })
+                    }
+                    className="w-full h-2 bg-control-bg-muted rounded-full appearance-none cursor-pointer accent-accent"
+                  />
+                  <p className="mt-1 text-xs text-muted">Толщина точек/линий. По умолчанию 1px.</p>
                 </div>
               </div>
             </div>

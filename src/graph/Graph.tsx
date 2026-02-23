@@ -47,8 +47,19 @@ export const Graph = () => {
   const manualEdgeMode = useStore((state) => state.settings.manualEdgeMode) ?? false;
   const highlightConnectedSubgraph = useStore((state) => state.settings.highlightConnectedSubgraph ?? true);
   const hideUnconnectedNodes = useStore((state) => state.settings.hideUnconnectedNodes === true);
-  const canvasFilter = useStore((state) => state.canvasFilter);
+  const bgPatternVariant = useStore((state) => state.settings.bgPatternVariant) ?? 'dots';
+  const bgPatternLinkedToSnap = useStore((state) => state.settings.bgPatternLinkedToSnap) ?? true;
+  const bgPatternGapSetting = useStore((state) => state.settings.bgPatternGap) ?? 20;
+  const bgPatternSize = useStore((state) => state.settings.bgPatternSize) ?? 1;
+  const bgPatternGap = bgPatternLinkedToSnap ? snapGridSize : bgPatternGapSetting;
 
+  const bgVariantMap: Record<string, BackgroundVariant> = {
+    dots: BackgroundVariant.Dots,
+    lines: BackgroundVariant.Lines,
+    cross: BackgroundVariant.Cross,
+  };
+
+  const canvasFilter = useStore((state) => state.canvasFilter);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeTypes = useMemo(() => ({ techNode: TechNode as any }), []);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -218,10 +229,10 @@ export const Graph = () => {
         deleteKeyCode={null} // Disable default delete behavior, we handle it ourselves
       >
         <Background
-          variant={BackgroundVariant.Dots}
+          variant={bgVariantMap[bgPatternVariant] ?? BackgroundVariant.Dots}
           color={theme === 'dark' ? '#1a1e26' : '#d7dee8'}
-          gap={20}
-          size={1}
+          gap={bgPatternGap}
+          size={bgPatternSize}
         />
         <AxisLockGuide />
         <Controls />

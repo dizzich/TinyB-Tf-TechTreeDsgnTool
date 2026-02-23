@@ -282,6 +282,14 @@ export interface ProjectSettings {
   glassEffectModifier?: number;
   /** Скрывать узлы без входящих и исходящих связей в списке и на полотне. Default false. */
   hideUnconnectedNodes?: boolean;
+  /** Вариант паттерна фона полотна: dots | lines | cross. Default 'dots'. */
+  bgPatternVariant?: 'dots' | 'lines' | 'cross';
+  /** Привязать шаг визуальной сетки к шагу привязки (snap). Default true. */
+  bgPatternLinkedToSnap?: boolean;
+  /** Шаг (gap) сетки в px. Default 20. Диапазон 10–100. Используется только при bgPatternLinkedToSnap=false. */
+  bgPatternGap?: number;
+  /** Размер элемента (size) сетки в px. Default 1. Диапазон 0.5–4. */
+  bgPatternSize?: number;
 }
 
 /** Filter property — all node data fields usable for filtering */
