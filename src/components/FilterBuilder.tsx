@@ -14,6 +14,7 @@ const PROPERTY_LABELS: Record<FilterProperty, string> = {
   techForAct: 'Tech акт',
   openCondition: 'Условие открытия',
   openConditionRefs: 'OpenCondition (ссылки)',
+  ingredients: 'Из чего крафтится (Ingridients)',
   outputItem: 'Предмет выдачи',
   usedCraftStation: 'На чём крафтится',
   usedStation: 'Станция крафта',

@@ -159,6 +159,7 @@ const getNotionAttributeForField = (
     designStatus: 'designStatus',
     notionSyncStatus: 'notionSyncStatus',
     openCondition: 'openCondition',
+    ingredients: 'ingredients',
     lineData: 'lineData',
   };
 
@@ -201,6 +202,7 @@ const CATEGORY_FIELD_ORDER = [
   'designStatus',
   'notionSyncStatus',
   'openCondition',
+  'ingredients',
   '_node',
 ] as const;
 

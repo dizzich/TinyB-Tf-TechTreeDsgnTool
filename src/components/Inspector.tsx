@@ -408,6 +408,114 @@ export const Inspector = () => {
           </>
         ))}
 
+        {paramSection('Связи', (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-muted mb-2 flex items-center gap-1">
+                <ArrowRight size={14} />
+                Входящие ({incomingEdges.length})
+              </label>
+              {incomingEdges.length > 0 ? (
+                <div className="space-y-1">
+                  {incomingEdges.map((edge) => {
+                    const sourceNode = nodes.find((n) => n.id === edge.source);
+                    return (
+                      <div key={edge.id} className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleJumpToNode(edge.source)}
+                          className="flex-1 min-w-0 text-left text-xs px-2 py-1.5 rounded-[8px] bg-control-bg-muted hover:bg-control-hover-bg border border-control-border-muted hover:border-control-hover-border text-text flex items-center justify-between gap-1.5 transition-colors"
+                        >
+                          <span className="min-w-0 break-words">{sourceNode?.data?.label || edge.source}</span>
+                          <ArrowLeft size={12} className="flex-shrink-0 ml-1" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectEdge(edge);
+                          }}
+                          className="p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                          title="Выделить связь"
+                          aria-label="Выделить связь"
+                        >
+                          <Link size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteEdge(edge);
+                          }}
+                          className="p-1.5 rounded-[6px] text-muted hover:text-danger hover:bg-danger/15 transition-colors flex-shrink-0"
+                          title="Удалить связь"
+                          aria-label="Удалить связь"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted italic">Нет</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-muted mb-2 flex items-center gap-1">
+                <ArrowRight size={14} />
+                Исходящие ({outgoingEdges.length})
+              </label>
+              {outgoingEdges.length > 0 ? (
+                <div className="space-y-1">
+                  {outgoingEdges.map((edge) => {
+                    const targetNode = nodes.find((n) => n.id === edge.target);
+                    return (
+                      <div key={edge.id} className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleJumpToNode(edge.target)}
+                          className="flex-1 min-w-0 text-left text-xs px-2 py-1.5 rounded-[8px] bg-control-bg-muted hover:bg-control-hover-bg border border-control-border-muted hover:border-control-hover-border text-text flex items-center justify-between gap-1.5 transition-colors"
+                        >
+                          <span className="min-w-0 break-words">{targetNode?.data?.label || edge.target}</span>
+                          <ArrowRight size={12} className="flex-shrink-0 ml-1" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectEdge(edge);
+                          }}
+                          className="p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                          title="Выделить связь"
+                          aria-label="Выделить связь"
+                        >
+                          <Link size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteEdge(edge);
+                          }}
+                          className="p-1.5 rounded-[6px] text-muted hover:text-danger hover:bg-danger/15 transition-colors flex-shrink-0"
+                          title="Удалить связь"
+                          aria-label="Удалить связь"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted italic">Нет</p>
+              )}
+            </div>
+          </>
+        ))}
+
         {paramSection('Крафт и условия', (
           <>
             <div>
@@ -481,6 +589,51 @@ export const Inspector = () => {
                 );
               })()}
             </div>
+            {(d?.ingredients?.length) && (
+              <div>
+                <label className={labelClass}>Из чего крафтится (Ingridients)</label>
+                <div className="space-y-1">
+                  {d.ingredients.map((ref: { name?: string; pageId?: string; qty?: number }, i: number) => {
+                    const color = getChipColor('ingredients', ref.name);
+                    const style = {
+                      backgroundColor: color ? `${color}20` : undefined,
+                      borderLeftWidth: color ? '3px' : undefined,
+                      borderLeftColor: color || undefined,
+                      boxShadow: color ? `0 0 10px ${color}40` : undefined,
+                    };
+                    const content = (
+                      <>
+                        <span className="truncate flex-1 min-w-0">
+                          {ref.name}
+                          {ref.qty ? ` ×${ref.qty}` : ''}
+                        </span>
+                        {ref.pageId && <NotionIcon size={14} className="flex-shrink-0 ml-1.5 opacity-90" color={color} />}
+                      </>
+                    );
+                    return ref.pageId ? (
+                      <a
+                        key={i}
+                        href={getNotionPageUrl(ref.pageId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
+                        style={style}
+                        title="Открыть в Notion"
+                      >
+                        {content}
+                      </a>
+                    ) : (
+                      <div key={i} className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
+                        <span className="truncate">
+                          {ref.name}
+                          {ref.qty ? ` ×${ref.qty}` : ''}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {(d?.usedStations?.length) && (
               <div>
                 <label className={labelClass}>Станция крафта (UsedStation)</label>
@@ -607,110 +760,6 @@ export const Inspector = () => {
             </div>
           </>
         ))}
-
-        <div>
-          <label className="block text-xs font-medium text-muted mb-2 flex items-center gap-1">
-            <ArrowRight size={14} />
-            Входящие ({incomingEdges.length})
-          </label>
-          {incomingEdges.length > 0 ? (
-            <div className="space-y-1">
-              {incomingEdges.map((edge) => {
-                const sourceNode = nodes.find((n) => n.id === edge.source);
-                return (
-                  <div key={edge.id} className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleJumpToNode(edge.source)}
-                      className="flex-1 min-w-0 text-left text-xs px-2 py-1.5 rounded-[8px] bg-control-bg-muted hover:bg-control-hover-bg border border-control-border-muted hover:border-control-hover-border text-text flex items-center justify-between gap-1.5 transition-colors"
-                    >
-                      <span className="min-w-0 break-words">{sourceNode?.data?.label || edge.source}</span>
-                      <ArrowLeft size={12} className="flex-shrink-0 ml-1" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectEdge(edge);
-                      }}
-                      className="p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
-                      title="Выделить связь"
-                      aria-label="Выделить связь"
-                    >
-                      <Link size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteEdge(edge);
-                      }}
-                      className="p-1.5 rounded-[6px] text-muted hover:text-danger hover:bg-danger/15 transition-colors flex-shrink-0"
-                      title="Удалить связь"
-                      aria-label="Удалить связь"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-xs text-muted italic">Нет</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-muted mb-2 flex items-center gap-1">
-            <ArrowRight size={14} />
-            Исходящие ({outgoingEdges.length})
-          </label>
-          {outgoingEdges.length > 0 ? (
-            <div className="space-y-1">
-              {outgoingEdges.map((edge) => {
-                const targetNode = nodes.find((n) => n.id === edge.target);
-                return (
-                  <div key={edge.id} className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleJumpToNode(edge.target)}
-                      className="flex-1 min-w-0 text-left text-xs px-2 py-1.5 rounded-[8px] bg-control-bg-muted hover:bg-control-hover-bg border border-control-border-muted hover:border-control-hover-border text-text flex items-center justify-between gap-1.5 transition-colors"
-                    >
-                      <span className="min-w-0 break-words">{targetNode?.data?.label || edge.target}</span>
-                      <ArrowRight size={12} className="flex-shrink-0 ml-1" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectEdge(edge);
-                      }}
-                      className="p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
-                      title="Выделить связь"
-                      aria-label="Выделить связь"
-                    >
-                      <Link size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteEdge(edge);
-                      }}
-                      className="p-1.5 rounded-[6px] text-muted hover:text-danger hover:bg-danger/15 transition-colors flex-shrink-0"
-                      title="Удалить связь"
-                      aria-label="Удалить связь"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-xs text-muted italic">Нет</p>
-          )}
-        </div>
 
         <div>
           <button

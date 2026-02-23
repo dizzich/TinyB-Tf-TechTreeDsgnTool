@@ -57,6 +57,8 @@ export function getColorValue(data: Record<string, any>, colorBy: NodeColorBy): 
       return data.gameStatus;
     case 'openCondition':
       return data.openCondition;
+    case 'ingredients':
+      return data.ingredients?.[0]?.name ?? undefined;
     case 'usedCraftStation':
       return data.usedCraftStationRefs?.[0]?.name ?? data.usedCraftStation ?? data.usedCraftStationRefs?.map((r: { name?: string }) => r.name).filter(Boolean).join(', ') ?? undefined;
     case 'usedStation':

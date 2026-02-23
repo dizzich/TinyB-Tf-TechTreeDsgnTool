@@ -223,13 +223,14 @@ const defaultMeta: ProjectMeta = {
   version: '1.0',
 };
 
-/** Migrate old actAndStage/actStage to act/stage; ensure usedCraftStation */
+/** Migrate old actAndStage/actStage to act/stage; ensure relation defaults */
 function migrateNotionColumnMapping(old: Record<string, unknown>): void {
   const cm = old as Record<string, string>;
   if (!cm.act && cm.actAndStage) cm.act = cm.actAndStage;
   if (!cm.act) cm.act = 'TechForAct';
   if (!cm.stage && cm.actStage) cm.stage = cm.actStage;
   if (!cm.stage) cm.stage = 'ActStage';
+  if (!cm.ingredients) cm.ingredients = 'Ingridients';
   if (!cm.usedCraftStation) cm.usedCraftStation = 'UsedCraftStation';
 }
 

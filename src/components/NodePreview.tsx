@@ -11,6 +11,7 @@ const SAMPLE_DATA = {
   category: 'Craft',
   powerType: 'Electricity',
   gameStatus: 'implemented',
+  ingredients: [{ name: 'Дерево' }],
   usedStations: [{ name: 'Станция' }],
   usedCraftStation: 'Верстак',
   techForAct: '🌳 Act 1',

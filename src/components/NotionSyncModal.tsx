@@ -20,6 +20,7 @@ function migrateColumnMapping(old: Record<string, string>): Record<string, strin
     ...rest,
     act: old.act ?? old.actAndStage ?? 'TechForAct',
     stage: old.stage ?? old.actStage ?? 'ActStage',
+    ingredients: old.ingredients ?? 'Ingridients',
     usedCraftStation: old.usedCraftStation ?? 'UsedCraftStation',
   };
 }
@@ -138,6 +139,9 @@ export const NotionSyncModal = () => {
         }
         if (props.includes('ActStage')) {
           setMapping((prev) => ({ ...prev, stage: 'ActStage' }));
+        }
+        if (props.includes('Ingridients')) {
+          setMapping((prev) => ({ ...prev, ingredients: 'Ingridients' }));
         }
         if (props.includes('UsedCraftStation')) {
           setMapping((prev) => ({ ...prev, usedCraftStation: 'UsedCraftStation' }));

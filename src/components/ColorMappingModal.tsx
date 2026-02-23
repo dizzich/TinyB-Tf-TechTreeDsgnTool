@@ -14,6 +14,7 @@ export const COLOR_BY_OPTIONS: { value: NodeColorBy; label: string }[] = [
   { value: 'powerType', label: 'Тип питания' },
   { value: 'gameStatus', label: 'Статус в игре' },
   { value: 'openCondition', label: 'OpenCondition (условие открытия)' },
+  { value: 'ingredients', label: 'Из чего крафтится (Ingridients)' },
   { value: 'usedCraftStation', label: 'На чём крафтится (UsedCraftStation)' },
   { value: 'usedStation', label: 'Станция крафта (UsedStation)' },
 ];

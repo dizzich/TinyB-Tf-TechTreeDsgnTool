@@ -5,14 +5,14 @@
  * The user provides their Integration Token and Database ID.
  *
  * Flow:
- * 1. Pull: Read all pages from Notion DB â†’ convert to TechNodes + TechEdges
- * 2. Push: Convert local nodes/edges â†’ update/create pages in Notion DB
+ * 1. Pull: Read all pages from Notion DB -> convert to TechNodes + TechEdges
+ * 2. Push: Convert local nodes/edges -> update/create pages in Notion DB
  * 3. Bidirectional: Compare timestamps, resolve conflicts
  */
 
 import { TechNode, TechEdge, NotionConfig, SyncResult, NodeData, SyncDiffItem, NotionColumnMapping } from '../types';
 
-// Notion API base URL â€” we use a lightweight CORS proxy approach.
+// Notion API base URL - we use a lightweight CORS proxy approach.
 // In production, this should be a backend proxy or Notion's official proxy.
 // For local dev, users can use a CORS proxy or a small server.
 const NOTION_API_VERSION = '2022-06-28';
@@ -236,7 +236,7 @@ const getTitleText = (titleProp: any): string => {
   return getPlainText(titleProp.title);
 };
 
-/** Notion named colors â†’ hex (for select/status chips) */
+/** Notion named colors -> hex (for select/status chips) */
 const NOTION_COLOR_TO_HEX: Record<string, string> = {
   default: '#9ca3af',
   gray: '#9ca3af',
@@ -428,7 +428,7 @@ const applyLineDataToEdges = (
   }
 };
 
-/** Resolve openCondition from page props: rich_text, formula, relation (with idâ†’title map), rollup (all values), select, status, title */
+/** Resolve openCondition from page props: rich_text, formula, relation (with id->title map), rollup (all values), select, status, title */
 function resolveOpenCondition(
   prop: any,
   relationIdToTitle?: Map<string, string>
@@ -455,6 +455,7 @@ export const notionPageToNodeData = (
   page: any,
   config: NotionConfig,
   relationIdToTitle?: Map<string, string>,
+  relationIdToTitleIngredients?: Map<string, string>,
   relationIdToTitleUsedCraftStation?: Map<string, string>,
   relationIdToTitleUsedStation?: Map<string, string>
 ): { notionPageId: string; data: NodeData; position?: { x: number; y: number } } => {
@@ -511,6 +512,20 @@ export const notionPageToNodeData = (
         };
       })()
       : {}),
+    ...(cm.ingredients
+      ? (() => {
+        const prop = props[cm.ingredients];
+        const map = relationIdToTitleIngredients;
+        const refs =
+          map && prop?.type === 'relation' && prop?.relation
+            ? getRelationIds(prop).map((id) => ({
+              name: map.get(id) ?? id,
+              pageId: id,
+            }))
+            : undefined;
+        return refs?.length ? { ingredients: refs } : {};
+      })()
+      : {}),
     ...(cm.usedCraftStation
       ? (() => {
         const prop = props[cm.usedCraftStation];
@@ -551,11 +566,12 @@ export const notionPageToNodeData = (
   return { notionPageId: page.id, data, position };
 };
 
-/** Field keys we use in NodeData â†’ Notion column mapping keys */
+/** Field keys we use in NodeData -> Notion column mapping keys */
 const FIELD_TO_COLUMN: Record<string, string> = {
   act: 'act',
   techForAct: 'act',
   stage: 'stage',
+  ingredients: 'ingredients',
   usedCraftStation: 'usedCraftStation',
   usedStation: 'usedStation',
   category: 'category',
@@ -610,6 +626,7 @@ export function buildNotionFieldColors(
     tryAdd('designStatus', props);
     tryAdd('notionSyncStatus', props);
     tryAdd('openCondition', props);
+    tryAdd('ingredients', props);
   }
 
   return result;
@@ -617,7 +634,7 @@ export function buildNotionFieldColors(
 
 const OPEN_CONDITION_FETCH_BATCH_SIZE = 10;
 
-/** Collect all unique relation IDs from a relation column and fetch their page titles. Returns id â†’ title map. */
+/** Collect all unique relation IDs from a relation column and fetch their page titles. Returns id -> title map. */
 async function fetchRelationIdToTitle(
   pages: any[],
   columnName: string | undefined,
@@ -643,7 +660,7 @@ async function fetchRelationIdToTitle(
   return map;
 }
 
-/** Collect all unique relation IDs from openCondition props and fetch their page titles. Returns id â†’ title map. */
+/** Collect all unique relation IDs from openCondition props and fetch their page titles. Returns id → title map. */
 async function fetchOpenConditionRelationIdToTitle(
   pages: any[],
   config: NotionConfig,
@@ -652,7 +669,16 @@ async function fetchOpenConditionRelationIdToTitle(
   return fetchRelationIdToTitle(pages, config.columnMapping.openCondition, options);
 }
 
-/** Collect all unique relation IDs from UsedCraftStation props and fetch their page titles. Returns id â†’ title map. */
+/** Collect all unique relation IDs from Ingridients props and fetch their page titles. Returns id → title map. */
+async function fetchIngredientsRelationIdToTitle(
+  pages: any[],
+  config: NotionConfig,
+  options: NotionApiOptions
+): Promise<Map<string, string>> {
+  return fetchRelationIdToTitle(pages, config.columnMapping.ingredients, options);
+}
+
+/** Collect all unique relation IDs from UsedCraftStation props and fetch their page titles. Returns id → title map. */
 async function fetchUsedCraftStationRelationIdToTitle(
   pages: any[],
   config: NotionConfig,
@@ -661,7 +687,7 @@ async function fetchUsedCraftStationRelationIdToTitle(
   return fetchRelationIdToTitle(pages, config.columnMapping.usedCraftStation, options);
 }
 
-/** Collect all unique relation IDs from UsedStation props and fetch their page titles. Returns id â†’ title map. */
+/** Collect all unique relation IDs from UsedStation props and fetch their page titles. Returns id → title map. */
 async function fetchUsedStationRelationIdToTitle(
   pages: any[],
   config: NotionConfig,
@@ -679,8 +705,14 @@ export const pullFromNotion = async (
   const pages = await queryAllPages(config.databaseId, options);
   const cm = config.columnMapping;
   const notionFieldColors = buildNotionFieldColors(pages, config);
-  const [relationIdToTitle, relationIdToTitleUsedCraftStation, relationIdToTitleUsedStation] = await Promise.all([
+  const [
+    relationIdToTitle,
+    relationIdToTitleIngredients,
+    relationIdToTitleUsedCraftStation,
+    relationIdToTitleUsedStation,
+  ] = await Promise.all([
     fetchOpenConditionRelationIdToTitle(pages, config, options),
+    fetchIngredientsRelationIdToTitle(pages, config, options),
     fetchUsedCraftStationRelationIdToTitle(pages, config, options),
     fetchUsedStationRelationIdToTitle(pages, config, options),
   ]);
@@ -689,11 +721,18 @@ export const pullFromNotion = async (
   const edges: TechEdge[] = [];
 
   // First pass: create nodes and build ID maps
-  const pageIdToNodeId = new Map<string, string>(); // Notion page ID â†’ node ID
-  const techCraftIdToNodeId = new Map<string, string>(); // TechCraftID â†’ node ID
+  const pageIdToNodeId = new Map<string, string>(); // Notion page ID -> node ID
+  const techCraftIdToNodeId = new Map<string, string>(); // TechCraftID -> node ID
 
   pages.forEach((page, index) => {
-    const { notionPageId, data, position } = notionPageToNodeData(page, config, relationIdToTitle, relationIdToTitleUsedCraftStation, relationIdToTitleUsedStation);
+    const { notionPageId, data, position } = notionPageToNodeData(
+      page,
+      config,
+      relationIdToTitle,
+      relationIdToTitleIngredients,
+      relationIdToTitleUsedCraftStation,
+      relationIdToTitleUsedStation
+    );
     const nodeId = data.techCraftId || `notion-${index}`;
 
     pageIdToNodeId.set(notionPageId, nodeId);
@@ -766,6 +805,7 @@ const pagesToNodesAndEdges = (
   config: NotionConfig,
   pageIdToNodeId: Map<string, string>,
   relationIdToTitle?: Map<string, string>,
+  relationIdToTitleIngredients?: Map<string, string>,
   relationIdToTitleUsedCraftStation?: Map<string, string>,
   relationIdToTitleUsedStation?: Map<string, string>
 ): { nodes: TechNode[]; edges: TechEdge[]; notionFieldColors: Record<string, Record<string, string>> } => {
@@ -774,7 +814,14 @@ const pagesToNodesAndEdges = (
   const edges: TechEdge[] = [];
 
   pages.forEach((page, index) => {
-    const { notionPageId, data, position } = notionPageToNodeData(page, config, relationIdToTitle, relationIdToTitleUsedCraftStation, relationIdToTitleUsedStation);
+    const { notionPageId, data, position } = notionPageToNodeData(
+      page,
+      config,
+      relationIdToTitle,
+      relationIdToTitleIngredients,
+      relationIdToTitleUsedCraftStation,
+      relationIdToTitleUsedStation
+    );
     const nodeId = pageIdToNodeId.get(notionPageId) ?? data.techCraftId ?? `notion-${index}`;
     pageIdToNodeId.set(notionPageId, nodeId);
 
@@ -853,12 +900,26 @@ const pullChangedPagesAsRemote = async (
     if (n.data.techCraftId) pageIdToNodeId.set(n.data.techCraftId, n.id);
   });
 
-  const [relationIdToTitle, relationIdToTitleUsedCraftStation, relationIdToTitleUsedStation] = await Promise.all([
+  const [
+    relationIdToTitle,
+    relationIdToTitleIngredients,
+    relationIdToTitleUsedCraftStation,
+    relationIdToTitleUsedStation,
+  ] = await Promise.all([
     fetchOpenConditionRelationIdToTitle(pages, config, options),
+    fetchIngredientsRelationIdToTitle(pages, config, options),
     fetchUsedCraftStationRelationIdToTitle(pages, config, options),
     fetchUsedStationRelationIdToTitle(pages, config, options),
   ]);
-  return pagesToNodesAndEdges(pages, config, pageIdToNodeId, relationIdToTitle, relationIdToTitleUsedCraftStation, relationIdToTitleUsedStation);
+  return pagesToNodesAndEdges(
+    pages,
+    config,
+    pageIdToNodeId,
+    relationIdToTitle,
+    relationIdToTitleIngredients,
+    relationIdToTitleUsedCraftStation,
+    relationIdToTitleUsedStation
+  );
 };
 
 /** Incremental pull: fetch only pages edited after lastSyncTime and merge with local */
@@ -935,6 +996,7 @@ export const DIFF_FIELD_LABELS: Record<string, string> = {
   designStatus: 'Статус дизайна',
   notionSyncStatus: 'Статус Notion',
   openCondition: 'Условие открытия',
+  ingredients: 'Ингредиенты',
   lineData: 'Маршруты линий',
 };
 const DIFF_FIELDS: { key: string; label: string }[] = Object.entries(DIFF_FIELD_LABELS).map(([key, label]) => ({
@@ -1197,7 +1259,7 @@ const buildNotionProperties = (
   if (data.notionSyncStatus) {
     props[cm.notionSyncStatus] = { status: { name: data.notionSyncStatus } };
   }
-  // OpenCondition: Notion type "relation" â€” build from openConditionRefs (pageId or resolve by name via nodeMap)
+  // OpenCondition: Notion type "relation" - build from openConditionRefs (pageId or resolve by name via nodeMap)
   if (cm.openCondition && data.openConditionRefs?.length) {
     const openConditionRelation = data.openConditionRefs
       .map((ref) => {
@@ -1212,7 +1274,7 @@ const buildNotionProperties = (
     }
   }
 
-  // UsedCraftStation: Notion type "relation" â€” build from usedCraftStationRefs
+  // UsedCraftStation: Notion type "relation" - build from usedCraftStationRefs
   if (cm.usedCraftStation && data.usedCraftStationRefs?.length) {
     const usedCraftStationRelation = data.usedCraftStationRefs
       .map((ref) => {
@@ -1227,7 +1289,22 @@ const buildNotionProperties = (
     }
   }
 
-  // UsedStation: Notion type "relation" â€” build from usedStations
+  // Ingridients: Notion type "relation" — build from ingredients
+  if (cm.ingredients && data.ingredients?.length) {
+    const ingredientsRelation = data.ingredients
+      .map((ref) => {
+        if (ref.pageId) return ref.pageId;
+        const byName = Array.from(nodeMap.values()).find((n) => n.data?.label === ref.name);
+        return byName?.data?.notionPageId;
+      })
+      .filter(Boolean)
+      .map((pageId) => ({ id: pageId as string }));
+    if (ingredientsRelation.length > 0) {
+      props[cm.ingredients] = { relation: ingredientsRelation };
+    }
+  }
+
+  // UsedStation: Notion type "relation" - build from usedStations
   if (cm.usedStation && data.usedStations?.length) {
     const usedStationRelation = data.usedStations
       .map((ref) => {
@@ -1242,7 +1319,7 @@ const buildNotionProperties = (
     }
   }
 
-  // Relations: PrevTechs â€” O(1) lookups via nodeMap
+  // Relations: PrevTechs - O(1) lookups via nodeMap
   const incomingEdges = edges.filter(e => e.target === nodeId);
   const prevRelations = incomingEdges
     .map(e => nodeMap.get(e.source)?.data?.notionPageId)
@@ -1253,7 +1330,7 @@ const buildNotionProperties = (
     props[cm.prevTechs] = { relation: prevRelations };
   }
 
-  // Relations: NextTechs â€” O(1) lookups via nodeMap
+  // Relations: NextTechs - O(1) lookups via nodeMap
   const outgoingEdges = edges.filter(e => e.source === nodeId);
   const nextRelations = outgoingEdges
     .map(e => nodeMap.get(e.target)?.data?.notionPageId)
@@ -1264,7 +1341,7 @@ const buildNotionProperties = (
     props[cm.nextTechs] = { relation: nextRelations };
   }
 
-  // EditorPosition â€” store node coordinates as JSON
+  // EditorPosition - store node coordinates as JSON
   if (cm.editorPosition && position) {
     props[cm.editorPosition] = {
       rich_text: [{
@@ -1275,7 +1352,7 @@ const buildNotionProperties = (
     };
   }
 
-  // LineData â€” serialize outgoing edge waypoints/pathType as JSON
+  // LineData - serialize outgoing edge waypoints/pathType as JSON
   if (cm.lineData) {
     const lineDataObj: Record<string, { waypoints?: { x: number; y: number }[]; pathType?: string }> = {};
     for (const edge of outgoingEdges) {
@@ -1303,7 +1380,7 @@ const toSet = (ids: Set<string> | string[] | undefined): Set<string> | undefined
   return ids.length > 0 ? new Set(ids) : undefined;
 };
 
-/** Push local nodes to Notion â€” create new or update existing pages (parallelized).
+/** Push local nodes to Notion - create new or update existing pages (parallelized).
  * When dirtyNodeIds is provided and non-empty, only pushes those nodes (incremental).
  * When dirtyNodeIds is empty, no-op. When not provided, full push. */
 export const pushToNotion = async (
@@ -1431,6 +1508,19 @@ function buildSingleNotionProperty(
   if (field === 'label') {
     if (!cm.workingName) return null;
     return { [cm.workingName]: { title: [{ text: { content: String(value ?? '') } }] } };
+  }
+  if (field === 'ingredients' && cm.ingredients) {
+    const refs = Array.isArray(value) ? (value as Array<{ name?: string; pageId?: string }>) : [];
+    const relation = refs
+      .map((ref) => {
+        if (ref?.pageId) return ref.pageId;
+        if (!ref?.name || !nodeMap) return undefined;
+        const byName = Array.from(nodeMap.values()).find((n) => n.data?.label === ref.name);
+        return byName?.data?.notionPageId;
+      })
+      .filter(Boolean)
+      .map((pageId) => ({ id: pageId as string }));
+    return { [cm.ingredients]: { relation } };
   }
   const strVal = value != null ? String(value) : '';
   if (field === 'techForAct' && cm.act) return { [cm.act]: { select: { name: strVal } } };
@@ -1579,7 +1669,7 @@ export const bidirectionalSync = async (
       mergedNodes.push(merged);
       result.updated++;
     } else {
-      // Only exists locally â€” keep it
+      // Only exists locally - keep it
       mergedNodes.push(localNode);
     }
   }

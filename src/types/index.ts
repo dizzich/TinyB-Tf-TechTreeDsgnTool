@@ -219,7 +219,16 @@ export interface ImportMapping {
   nextTechsColumn?: string; // Outgoing relations (NextTechs)
 }
 
-export type NodeColorBy = 'category' | 'stage' | 'act' | 'powerType' | 'gameStatus' | 'openCondition' | 'usedCraftStation' | 'usedStation';
+export type NodeColorBy =
+  | 'category'
+  | 'stage'
+  | 'act'
+  | 'powerType'
+  | 'gameStatus'
+  | 'openCondition'
+  | 'ingredients'
+  | 'usedCraftStation'
+  | 'usedStation';
 
 export const DEFAULT_NODE_COLOR_PALETTE = [
   '#6aa2ff', '#a78bfa', '#f59e42', '#34d399',
@@ -305,6 +314,7 @@ export type FilterProperty =
   | 'techForAct'
   | 'openCondition'
   | 'openConditionRefs'
+  | 'ingredients'
   | 'outputItem'
   | 'usedCraftStation'
   | 'usedStation'
