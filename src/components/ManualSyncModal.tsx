@@ -159,6 +159,7 @@ const getNotionAttributeForField = (
     designStatus: 'designStatus',
     notionSyncStatus: 'notionSyncStatus',
     openCondition: 'openCondition',
+    lineData: 'lineData',
   };
 
   const mappingKey = keyMap[field];
@@ -542,10 +543,10 @@ export const ManualSyncModal = () => {
     const localMs =
       d.field === 'position'
         ? maxIsoMs([
-            localNode.data.positionModifiedAt,
-            localNode.data.localModifiedAt,
-            localNode.data.updatedAt,
-          ])
+          localNode.data.positionModifiedAt,
+          localNode.data.localModifiedAt,
+          localNode.data.updatedAt,
+        ])
         : maxIsoMs([localNode.data.localModifiedAt, localNode.data.updatedAt]);
 
     const remoteMs = parseIsoMs(remoteNode.data.updatedAt);
@@ -563,8 +564,8 @@ export const ManualSyncModal = () => {
       const tombstone = getDeletedTombstone(d);
       const remoteFromValue =
         d.remoteValue &&
-        typeof d.remoteValue === 'object' &&
-        'data' in (d.remoteValue as object)
+          typeof d.remoteValue === 'object' &&
+          'data' in (d.remoteValue as object)
           ? (d.remoteValue as TechNode).data.updatedAt
           : undefined;
       const remoteFromMap = d.notionPageId ? remoteNodesByPageId.get(d.notionPageId)?.data.updatedAt : undefined;
@@ -588,10 +589,10 @@ export const ManualSyncModal = () => {
     const localIso =
       d.field === 'position'
         ? maxIsoValue([
-            localNode.data.positionModifiedAt,
-            localNode.data.localModifiedAt,
-            localNode.data.updatedAt,
-          ])
+          localNode.data.positionModifiedAt,
+          localNode.data.localModifiedAt,
+          localNode.data.updatedAt,
+        ])
         : maxIsoValue([localNode.data.localModifiedAt, localNode.data.updatedAt]);
 
     return {
@@ -1052,11 +1053,10 @@ export const ManualSyncModal = () => {
 
           {batchSummary && (
             <div
-              className={`rounded-control p-3 text-sm mb-4 border ${
-                batchSummary.failed > 0 || batchSummary.skippedUnknown > 0
+              className={`rounded-control p-3 text-sm mb-4 border ${batchSummary.failed > 0 || batchSummary.skippedUnknown > 0
                   ? 'text-amber-300 bg-amber-500/10 border-amber-500/40'
                   : 'text-emerald-300 bg-emerald-500/10 border-emerald-500/40'
-              }`}
+                }`}
             >
               <div>
                 {batchSummary.action === 'pull'

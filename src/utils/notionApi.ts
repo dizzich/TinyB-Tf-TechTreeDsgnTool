@@ -135,7 +135,7 @@ export const retrievePageTitle = async (
     const page = await notionFetch(`/pages/${pageId}`, options);
     const props = page?.properties;
     if (!props || typeof props !== 'object') return '';
-    const titleProp = Object.values(props).find((p: any) => p?.type === 'title');
+    const titleProp = Object.values(props).find((p: any) => p?.type === 'title') as any;
     if (!titleProp?.title) return '';
     return getPlainText(titleProp.title);
   } catch {
@@ -408,8 +408,7 @@ const parseLineData = (text: string): Record<string, { waypoints?: { x: number; 
 const applyLineDataToEdges = (
   pages: any[],
   config: NotionConfig,
-  edges: TechEdge[],
-  pageIdToNodeId: Map<string, string>
+  edges: TechEdge[]
 ): void => {
   const cm = config.columnMapping;
   if (!cm.lineData) return;
@@ -756,7 +755,7 @@ export const pullFromNotion = async (
     i === self.findIndex(t => t.source === edge.source && t.target === edge.target)
   );
 
-  applyLineDataToEdges(pages, config, uniqueEdges, pageIdToNodeId);
+  applyLineDataToEdges(pages, config, uniqueEdges);
 
   return { nodes, edges: uniqueEdges, notionFieldColors };
 };
@@ -827,7 +826,7 @@ const pagesToNodesAndEdges = (
   const uniqueEdges = edges.filter((edge, i, self) =>
     i === self.findIndex((t) => t.source === edge.source && t.target === edge.target)
   );
-  applyLineDataToEdges(pages, config, uniqueEdges, pageIdToNodeId);
+  applyLineDataToEdges(pages, config, uniqueEdges);
   const notionFieldColors = buildNotionFieldColors(pages, config);
   return { nodes, edges: uniqueEdges, notionFieldColors };
 };
@@ -936,6 +935,7 @@ export const DIFF_FIELD_LABELS: Record<string, string> = {
   designStatus: 'Статус дизайна',
   notionSyncStatus: 'Статус Notion',
   openCondition: 'Условие открытия',
+  lineData: 'Маршруты линий',
 };
 const DIFF_FIELDS: { key: string; label: string }[] = Object.entries(DIFF_FIELD_LABELS).map(([key, label]) => ({
   key,
@@ -1021,6 +1021,32 @@ export const computeSyncDiffs = (
         } else if (key === 'openCondition') {
           localVal = local.data.openCondition ?? '';
           remoteVal = remote.data.openCondition ?? '';
+        } else if (key === 'lineData') {
+          // Local line data: outgoing edges' waypoints and pathType
+          const localOutgoing = localEdges.filter((e) => e.source === local.id);
+          const lineDataObj: Record<string, any> = {};
+          for (const edge of localOutgoing) {
+            if (edge.waypoints?.length || edge.pathType) {
+              lineDataObj[edge.id] = {
+                ...(edge.waypoints?.length ? { waypoints: edge.waypoints } : {}),
+                ...(edge.pathType ? { pathType: edge.pathType } : {}),
+              };
+            }
+          }
+          localVal = Object.keys(lineDataObj).length > 0 ? lineDataObj : null;
+
+          // Remote line data: already computed and stored in remoteEdges
+          const remoteOutgoing = remoteEdges.filter((e) => e.source === remote.id);
+          const remLineDataObj: Record<string, any> = {};
+          for (const edge of remoteOutgoing) {
+            if (edge.waypoints?.length || edge.pathType) {
+              remLineDataObj[edge.id] = {
+                ...(edge.waypoints?.length ? { waypoints: edge.waypoints } : {}),
+                ...(edge.pathType ? { pathType: edge.pathType } : {}),
+              };
+            }
+          }
+          remoteVal = Object.keys(remLineDataObj).length > 0 ? remLineDataObj : null;
         } else if (key === 'incomingLinks' || key === 'outgoingLinks') {
           continue;
         } else {
