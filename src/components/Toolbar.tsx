@@ -89,9 +89,10 @@ export const Toolbar = () => {
   const setAllowBackgroundSync = useStore((state) => state.setAllowBackgroundSync);
   const setSyncMode = useStore((state) => state.setSyncMode);
   const setForceShowStartupModal = useStore((state) => state.setForceShowStartupModal);
+  const setSaveConfirmResolve = useStore((state) => state.setSaveConfirmResolve);
   const deletedTombstoneCount = Object.keys(deletedNotionTombstones).length;
 
-  const { saveProject, openProject } = useFileSystem();
+  const { saveProject, openProject, hasHandle } = useFileSystem();
   const { doPush, doPull, canSync } = useNotionSyncActions();
   const [notionMenuOpen, setNotionMenuOpen] = useState(false);
   const notionMenuRef = useRef<HTMLDivElement>(null);
@@ -241,8 +242,29 @@ export const Toolbar = () => {
       deletedNotionTombstones:
         Object.keys(deletedNotionTombstones).length > 0 ? deletedNotionTombstones : undefined,
     };
-    await saveProject(projectData);
-    setOfflineDirty(false);
+
+    const doSave = async (forceNew: boolean) => {
+      try {
+        const result = await saveProject(projectData, forceNew);
+        if (result?.fileName) {
+          setCurrentFileName(result.fileName);
+        }
+        setOfflineDirty(false);
+      } catch (e) {
+        // user cancelled or error
+      }
+    };
+
+    if (hasHandle) {
+      setSaveConfirmResolve((saveAsNew) => {
+        if (saveAsNew !== null) {
+          doSave(saveAsNew);
+        }
+      });
+      setModalOpen('saveConfirm', true);
+    } else {
+      doSave(false);
+    }
   };
 
   const doOpenProject = async () => {
@@ -557,11 +579,10 @@ export const Toolbar = () => {
           <button
             type="button"
             onClick={() => updateSettings({ snapEnabled: !(settings.snapEnabled ?? true) })}
-            className={`${iconBtnClass} w-9 flex items-center justify-center rounded-r-none -mr-px ${
-              (settings.snapEnabled ?? true)
+            className={`${iconBtnClass} w-9 flex items-center justify-center rounded-r-none -mr-px ${(settings.snapEnabled ?? true)
                 ? '!text-accent !border-accent bg-accent/15 shadow-[0_0_8px_rgba(106,162,255,0.4)] ring-1 ring-accent/40'
                 : ''
-            }`}
+              }`}
             title={(settings.snapEnabled ?? true) ? 'Выкл привязку' : 'Вкл привязку'}
             aria-label="Привязка"
             aria-pressed={settings.snapEnabled ?? true}
@@ -633,9 +654,8 @@ export const Toolbar = () => {
           <button
             type="button"
             onClick={() => setEdgeMenuOpen((o) => !o)}
-            className={`${iconBtnClass} w-auto px-2 flex items-center gap-1.5 ${
-              settings.manualEdgeMode ? 'text-accent border-accent/50 shadow-[0_0_5px_rgba(106,162,255,0.2)]' : ''
-            }`}
+            className={`${iconBtnClass} w-auto px-2 flex items-center gap-1.5 ${settings.manualEdgeMode ? 'text-accent border-accent/50 shadow-[0_0_5px_rgba(106,162,255,0.2)]' : ''
+              }`}
             title={settings.manualEdgeMode ? 'Ручные линии (вейпоинты)' : 'Тип соединений'}
             aria-label="Тип соединений"
           >
@@ -663,9 +683,8 @@ export const Toolbar = () => {
                   onClick={() => {
                     updateSettings({ edgeType: opt.value });
                   }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-control-hover-bg ${
-                    currentEdgeType === opt.value ? 'text-accent bg-accent/10' : 'text-text'
-                  }`}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-control-hover-bg ${currentEdgeType === opt.value ? 'text-accent bg-accent/10' : 'text-text'
+                    }`}
                 >
                   <opt.icon size={16} strokeWidth={1.75} />
                   {opt.label}
@@ -732,9 +751,8 @@ export const Toolbar = () => {
           <button
             type="button"
             onClick={() => setCanvasFilterOpen((o) => !o)}
-            className={`${iconBtnClass} w-auto px-2 flex items-center gap-1.5 ${
-              canvasFilterCount > 0 ? 'text-accent border-accent/50 shadow-[0_0_5px_rgba(106,162,255,0.2)]' : ''
-            }`}
+            className={`${iconBtnClass} w-auto px-2 flex items-center gap-1.5 ${canvasFilterCount > 0 ? 'text-accent border-accent/50 shadow-[0_0_5px_rgba(106,162,255,0.2)]' : ''
+              }`}
             title="Фильтр полотна"
             aria-label="Фильтр полотна"
           >
@@ -819,9 +837,8 @@ export const Toolbar = () => {
                     updateSettings({ nodeColorBy: opt.value });
                     setColorMenuOpen(false);
                   }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-control-hover-bg ${
-                    (settings.nodeColorBy ?? 'category') === opt.value ? 'text-accent bg-accent/10' : 'text-text'
-                  }`}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-control-hover-bg ${(settings.nodeColorBy ?? 'category') === opt.value ? 'text-accent bg-accent/10' : 'text-text'
+                    }`}
                 >
                   {opt.label}
                 </button>
@@ -852,9 +869,8 @@ export const Toolbar = () => {
           <button
             type="button"
             onClick={() => setModalOpen('notionSync', true)}
-            className={`${iconBtnClass} w-auto min-w-[6.5rem] px-2 flex items-center gap-1.5 rounded-r-none -mr-px ${
-              notionConfig ? 'text-accent border-accent/50 shadow-[0_0_5px_rgba(106,162,255,0.2)]' : ''
-            } ${canSync ? '' : 'rounded-r-control'}`}
+            className={`${iconBtnClass} w-auto min-w-[6.5rem] px-2 flex items-center gap-1.5 rounded-r-none -mr-px ${notionConfig ? 'text-accent border-accent/50 shadow-[0_0_5px_rgba(106,162,255,0.2)]' : ''
+              } ${canSync ? '' : 'rounded-r-control'}`}
             title={
               syncInProgress
                 ? syncProgress
@@ -883,9 +899,8 @@ export const Toolbar = () => {
             )}
             {notionConfig && (
               <span
-                className={`text-xs font-bold leading-none ${
-                  syncInProgress ? 'text-muted' : lastSyncError ? 'text-amber-400' : notionDirty && dirtyNodeIds.size > 0 ? 'text-amber-400' : 'text-emerald-400'
-                }`}
+                className={`text-xs font-bold leading-none ${syncInProgress ? 'text-muted' : lastSyncError ? 'text-amber-400' : notionDirty && dirtyNodeIds.size > 0 ? 'text-amber-400' : 'text-emerald-400'
+                  }`}
               >
                 {syncInProgress
                   ? syncProgress

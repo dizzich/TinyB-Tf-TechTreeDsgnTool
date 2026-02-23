@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "cb03e458ae53b58fb56c742edde46b3faa24cb3995e68c7ad451e21d94af02f1"
     },
+    "drawio": {
+      "source": "bahayonghang/drawio-skills",
+      "sourceType": "github",
+      "computedHash": "e4b649d3a9498c5328c8874ee673c9e34df0167a8d0482a867ae8e6b08bd5411"
+    },
     "find-skills": {
       "source": "vercel-labs/skills",
       "sourceType": "github",

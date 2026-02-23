@@ -100,6 +100,7 @@ interface AppState {
     colorMapping: boolean;
     unsavedChanges: boolean;
     manualSync: boolean;
+    saveConfirm: boolean;
   };
   manualSyncMode: 'diff' | 'conflicts';
   /** When mode is 'conflicts', use these instead of computed diffs */
@@ -168,7 +169,7 @@ interface AppState {
   setCanvasFilter: (filter: Partial<CanvasFilter>) => void;
   setConnectedSubgraphHighlight: (ids: { nodeIds: Set<string>; edgeIds: Set<string> } | null) => void;
 
-  setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync' | 'colorMapping' | 'unsavedChanges' | 'manualSync', isOpen: boolean) => void;
+  setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync' | 'colorMapping' | 'unsavedChanges' | 'manualSync' | 'saveConfirm', isOpen: boolean) => void;
   setManualSyncMode: (mode: 'diff' | 'conflicts') => void;
   setManualSyncConflicts: (conflicts: import('../types').SyncConflict[]) => void;
   /** Apply a single remote field value to local graph node (for manual sync) */
@@ -179,6 +180,8 @@ interface AppState {
   /** Resolver for UnsavedChangesModal: (proceed, suppress) => void */
   unsavedChangesResolve: ((proceed: boolean, suppress: boolean) => void) | null;
   setUnsavedChangesResolve: (fn: ((proceed: boolean, suppress: boolean) => void) | null) => void;
+  saveConfirmResolve: ((saveAsNew: boolean | null) => void) | null;
+  setSaveConfirmResolve: (fn: ((saveAsNew: boolean | null) => void) | null) => void;
 
   // UI Actions
   toggleSidebar: () => void;
@@ -214,7 +217,7 @@ const defaultMeta: ProjectMeta = {
   name: 'New Project',
   updatedAt: new Date().toISOString(),
   version: '1.0',
-  };
+};
 
 /** Migrate old actAndStage/actStage to act/stage; ensure usedCraftStation */
 function migrateNotionColumnMapping(old: Record<string, unknown>): void {
@@ -359,543 +362,546 @@ export const useStore = create<AppState>()((set, get) => ({
   canUndo: () => get()._history.past.length > 0,
   canRedo: () => get()._history.future.length > 0,
 
-      currentFileName: null,
-      offlineDirty: false,
+  currentFileName: null,
+  offlineDirty: false,
 
-      // Notion state
-      notionConfig: loadNotionConfig(),
-      notionCorsProxy: localStorage.getItem('techtree_notion_cors_proxy') || '',
-      notionConnected: false,
-      syncInProgress: false,
-      syncProgress: null,
-      lastSyncResult: null,
-      lastSyncTime: loadLastSyncTime(loadNotionConfig()?.databaseId),
-      lastSyncError: null,
-      notionSourceOfTruth: false,
-      allowBackgroundSync: false,
-      syncMode: 'pause',
-      notionDirty: false,
-      notionHasRemoteUpdates: false,
-      dirtyNodeIds: new Set<string>(),
-      deletedNotionTombstones: {},
-      syncJustCompleted: false,
-      notionFieldColors: {},
+  // Notion state
+  notionConfig: loadNotionConfig(),
+  notionCorsProxy: localStorage.getItem('techtree_notion_cors_proxy') || '',
+  notionConnected: false,
+  syncInProgress: false,
+  syncProgress: null,
+  lastSyncResult: null,
+  lastSyncTime: loadLastSyncTime(loadNotionConfig()?.databaseId),
+  lastSyncError: null,
+  notionSourceOfTruth: false,
+  allowBackgroundSync: false,
+  syncMode: 'pause',
+  notionDirty: false,
+  notionHasRemoteUpdates: false,
+  dirtyNodeIds: new Set<string>(),
+  deletedNotionTombstones: {},
+  syncJustCompleted: false,
+  notionFieldColors: {},
 
-      canvasFilter: {
-        enabled: false,
-        rules: [],
-        hideMode: 'dim',
-      },
+  canvasFilter: {
+    enabled: false,
+    rules: [],
+    hideMode: 'dim',
+  },
 
-      connectedSubgraphHighlight: null,
+  connectedSubgraphHighlight: null,
 
-      _shiftKeyPressed: false,
-      _dragAxisLock: new Map<string, { lockX?: number; lockY?: number }>(),
-      _nodeDragStartPos: null,
+  _shiftKeyPressed: false,
+  _dragAxisLock: new Map<string, { lockX?: number; lockY?: number }>(),
+  _nodeDragStartPos: null,
 
-      setShiftKeyPressed: (pressed) => {
-        set({
-          _shiftKeyPressed: pressed,
-          ...(pressed ? {} : { _dragAxisLock: new Map() }),
-        });
-      },
+  setShiftKeyPressed: (pressed) => {
+    set({
+      _shiftKeyPressed: pressed,
+      ...(pressed ? {} : { _dragAxisLock: new Map() }),
+    });
+  },
 
-      ui: {
-        sidebarOpen: true,
-        inspectorOpen: true,
-        theme: loadTheme(),
-      },
+  ui: {
+    sidebarOpen: true,
+    inspectorOpen: true,
+    theme: loadTheme(),
+  },
 
-      modals: {
-        import: false,
-        settings: false,
-        export: false,
-        notionSync: false,
-        colorMapping: false,
-        unsavedChanges: false,
-        manualSync: false,
-      },
-      manualSyncMode: 'diff',
-      manualSyncConflicts: [],
+  modals: {
+    import: false,
+    settings: false,
+    export: false,
+    notionSync: false,
+    colorMapping: false,
+    unsavedChanges: false,
+    manualSync: false,
+    saveConfirm: false,
+  },
+  manualSyncMode: 'diff',
+  manualSyncConflicts: [],
 
-      onNodeDragStart: (_event, node) => {
-        get()._pushSnapshot();
-        if (node?.id != null && node?.position != null)
-          set({ _nodeDragStartPos: { id: node.id, x: node.position.x, y: node.position.y } });
-      },
+  onNodeDragStart: (_event, node) => {
+    get()._pushSnapshot();
+    if (node?.id != null && node?.position != null)
+      set({ _nodeDragStartPos: { id: node.id, x: node.position.x, y: node.position.y } });
+  },
 
-      onNodesChange: (changes: NodeChange<TechNode>[]) => {
-        if (_restoringHistory) return;
+  onNodesChange: (changes: NodeChange<TechNode>[]) => {
+    if (_restoringHistory) return;
 
-        const currentNodes = get().nodes;
-        const settings = get().settings;
-        const snapEnabled = settings.snapEnabled ?? true;
-        const snapToObjects = settings.snapToObjects ?? false;
-        const snapGridSize = settings.snapGridSize ?? 8;
-        const nodeMinWidth = settings.nodeMinWidth ?? 200;
-        const nodeMinHeight = settings.nodeMinHeight ?? 48;
+    const currentNodes = get().nodes;
+    const settings = get().settings;
+    const snapEnabled = settings.snapEnabled ?? true;
+    const snapToObjects = settings.snapToObjects ?? false;
+    const snapGridSize = settings.snapGridSize ?? 8;
+    const nodeMinWidth = settings.nodeMinWidth ?? 200;
+    const nodeMinHeight = settings.nodeMinHeight ?? 48;
 
-        const shiftPressed = get()._shiftKeyPressed;
-        const dragAxisLock = get()._dragAxisLock;
+    const shiftPressed = get()._shiftKeyPressed;
+    const dragAxisLock = get()._dragAxisLock;
 
-        let processedChanges = changes;
-        if (snapEnabled) {
-          processedChanges = changes.map((c) => {
-            if (c.type !== 'position' || !c.id) return c;
-            const posChange = c as { type: 'position'; id: string; position?: { x: number; y: number }; dragging?: boolean };
-            const position = posChange.position;
-            if (!position) return c;
+    let processedChanges = changes;
+    if (snapEnabled) {
+      processedChanges = changes.map((c) => {
+        if (c.type !== 'position' || !c.id) return c;
+        const posChange = c as { type: 'position'; id: string; position?: { x: number; y: number }; dragging?: boolean };
+        const position = posChange.position;
+        if (!position) return c;
 
-            let x = position.x;
-            let y = position.y;
-            const isDragging = posChange.dragging === true;
+        let x = position.x;
+        let y = position.y;
+        const isDragging = posChange.dragging === true;
 
-            if (shiftPressed && isDragging) {
-              const lock = dragAxisLock.get(posChange.id);
-              if (lock) {
-                x = lock.lockX ?? position.x;
-                y = lock.lockY ?? position.y;
+        if (shiftPressed && isDragging) {
+          const lock = dragAxisLock.get(posChange.id);
+          if (lock) {
+            x = lock.lockX ?? position.x;
+            y = lock.lockY ?? position.y;
+          } else {
+            const objSnap = snapPositionToObjects(position, posChange.id, currentNodes, {
+              threshold: 40,
+              defaultWidth: nodeMinWidth,
+              defaultHeight: nodeMinHeight,
+            });
+            if (objSnap.snappedX || objSnap.snappedY) {
+              const nextLock = new Map(dragAxisLock);
+              if (objSnap.snappedX && objSnap.snappedY) {
+                const start = get()._nodeDragStartPos;
+                const preferVertical = start && start.id === posChange.id
+                  ? Math.abs(position.y - start.y) >= Math.abs(position.x - start.x)
+                  : objSnap.minDx <= objSnap.minDy;
+                nextLock.set(posChange.id, preferVertical ? { lockX: objSnap.x } : { lockY: objSnap.y });
+              } else if (objSnap.snappedX) {
+                nextLock.set(posChange.id, { lockX: objSnap.x });
               } else {
-                const objSnap = snapPositionToObjects(position, posChange.id, currentNodes, {
-                  threshold: 40,
-                  defaultWidth: nodeMinWidth,
-                  defaultHeight: nodeMinHeight,
-                });
-                if (objSnap.snappedX || objSnap.snappedY) {
-                  const nextLock = new Map(dragAxisLock);
-                  if (objSnap.snappedX && objSnap.snappedY) {
-                    const start = get()._nodeDragStartPos;
-                    const preferVertical = start && start.id === posChange.id
-                      ? Math.abs(position.y - start.y) >= Math.abs(position.x - start.x)
-                      : objSnap.minDx <= objSnap.minDy;
-                    nextLock.set(posChange.id, preferVertical ? { lockX: objSnap.x } : { lockY: objSnap.y });
-                  } else if (objSnap.snappedX) {
-                    nextLock.set(posChange.id, { lockX: objSnap.x });
-                  } else {
-                    nextLock.set(posChange.id, { lockY: objSnap.y });
-                  }
-                  set({ _dragAxisLock: nextLock });
-                  x = objSnap.x;
-                  y = objSnap.y;
-                }
+                nextLock.set(posChange.id, { lockY: objSnap.y });
               }
-            } else if (snapToObjects && !shiftPressed) {
-              const objSnap = snapPositionToObjects(position, posChange.id, currentNodes, {
-                threshold: 16,
-                defaultWidth: nodeMinWidth,
-                defaultHeight: nodeMinHeight,
-              });
+              set({ _dragAxisLock: nextLock });
               x = objSnap.x;
               y = objSnap.y;
-              if ((!objSnap.snappedX || !objSnap.snappedY) && snapGridSize > 0) {
-                const gridSnap = snapToGrid(x, y, snapGridSize);
-                if (!objSnap.snappedX) x = gridSnap.x;
-                if (!objSnap.snappedY) y = gridSnap.y;
-              }
-            } else if (snapGridSize > 0) {
-              const gridSnap = snapToGrid(x, y, snapGridSize);
-              x = gridSnap.x;
-              y = gridSnap.y;
             }
-
-            if (x === position.x && y === position.y) return c;
-            return { ...c, position: { x, y } } as NodeChange<TechNode>;
-          });
-        }
-
-        const dragEndIds: string[] = [];
-        let hasDragEnd = false;
-        for (const c of processedChanges) {
-          const posChange = c as { type: string; id?: string; dragging?: boolean };
-          if (c.type === 'position' && c.id && posChange.dragging === false) {
-            dragEndIds.push(c.id);
-            hasDragEnd = true;
           }
-        }
-        const newNodes = applyNodeChanges(processedChanges, currentNodes);
-        if (hasDragEnd) {
-          const nextLock = new Map(get()._dragAxisLock);
-          dragEndIds.forEach((id) => nextLock.delete(id));
-          const start = get()._nodeDragStartPos;
-          const clearStart = start != null && dragEndIds.includes(start.id);
-          const ts = nowIso();
-          const ids = new Set(dragEndIds);
-          const nodesWithTs = newNodes.map((n) =>
-            ids.has(n.id) ? { ...n, data: { ...n.data, positionModifiedAt: ts } } : n
-          );
-          const next = new Set(get().dirtyNodeIds);
-          dragEndIds.forEach((id) => next.add(id));
-          set({
-            nodes: nodesWithTs,
-            dirtyNodeIds: next,
-            _dragAxisLock: nextLock,
-            offlineDirty: true,
-            ...(clearStart ? { _nodeDragStartPos: null } : {}),
+        } else if (snapToObjects && !shiftPressed) {
+          const objSnap = snapPositionToObjects(position, posChange.id, currentNodes, {
+            threshold: 16,
+            defaultWidth: nodeMinWidth,
+            defaultHeight: nodeMinHeight,
           });
-        } else {
-          set({ nodes: newNodes, offlineDirty: true });
-        }
-      },
-
-      onEdgesChange: (changes: EdgeChange<TechEdge>[]) => {
-        if (_restoringHistory) return;
-
-        const currentEdges = get().edges;
-        const removedIds: string[] = [];
-        for (const c of changes) {
-          if (c.type === 'remove' && c.id) {
-            const edge = currentEdges.find((e) => e.id === c.id);
-            if (edge) removedIds.push(edge.source, edge.target);
+          x = objSnap.x;
+          y = objSnap.y;
+          if ((!objSnap.snappedX || !objSnap.snappedY) && snapGridSize > 0) {
+            const gridSnap = snapToGrid(x, y, snapGridSize);
+            if (!objSnap.snappedX) x = gridSnap.x;
+            if (!objSnap.snappedY) y = gridSnap.y;
           }
+        } else if (snapGridSize > 0) {
+          const gridSnap = snapToGrid(x, y, snapGridSize);
+          x = gridSnap.x;
+          y = gridSnap.y;
         }
-        const newEdges = applyEdgeChanges(changes, currentEdges);
-        if (removedIds.length > 0) {
-          get()._pushSnapshot();
-          const ts = nowIso();
-          const ids = new Set(removedIds);
-          const newNodes = get().nodes.map((n) =>
-            ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
-          );
-          const next = new Set(get().dirtyNodeIds);
-          removedIds.forEach((id) => next.add(id));
-          set({ nodes: newNodes, edges: newEdges, dirtyNodeIds: next, offlineDirty: true });
-        } else {
-          set({ edges: newEdges, offlineDirty: true });
-        }
-      },
 
-      onConnect: (connection: Connection) => {
-        get()._pushSnapshot();
-        const next = new Set(get().dirtyNodeIds);
-        const ids = new Set<string>();
-        if (connection.source) { next.add(connection.source); ids.add(connection.source); }
-        if (connection.target) { next.add(connection.target); ids.add(connection.target); }
-        const ts = nowIso();
-        const newNodes = get().nodes.map((n) =>
-          ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+        if (x === position.x && y === position.y) return c;
+        return { ...c, position: { x, y } } as NodeChange<TechNode>;
+      });
+    }
+
+    const dragEndIds: string[] = [];
+    let hasDragEnd = false;
+    for (const c of processedChanges) {
+      const posChange = c as { type: string; id?: string; dragging?: boolean };
+      if (c.type === 'position' && c.id && posChange.dragging === false) {
+        dragEndIds.push(c.id);
+        hasDragEnd = true;
+      }
+    }
+    const newNodes = applyNodeChanges(processedChanges, currentNodes);
+    if (hasDragEnd) {
+      const nextLock = new Map(get()._dragAxisLock);
+      dragEndIds.forEach((id) => nextLock.delete(id));
+      const start = get()._nodeDragStartPos;
+      const clearStart = start != null && dragEndIds.includes(start.id);
+      const ts = nowIso();
+      const ids = new Set(dragEndIds);
+      const nodesWithTs = newNodes.map((n) =>
+        ids.has(n.id) ? { ...n, data: { ...n.data, positionModifiedAt: ts } } : n
+      );
+      const next = new Set(get().dirtyNodeIds);
+      dragEndIds.forEach((id) => next.add(id));
+      set({
+        nodes: nodesWithTs,
+        dirtyNodeIds: next,
+        _dragAxisLock: nextLock,
+        offlineDirty: true,
+        ...(clearStart ? { _nodeDragStartPos: null } : {}),
+      });
+    } else {
+      set({ nodes: newNodes, offlineDirty: true });
+    }
+  },
+
+  onEdgesChange: (changes: EdgeChange<TechEdge>[]) => {
+    if (_restoringHistory) return;
+
+    const currentEdges = get().edges;
+    const removedIds: string[] = [];
+    for (const c of changes) {
+      if (c.type === 'remove' && c.id) {
+        const edge = currentEdges.find((e) => e.id === c.id);
+        if (edge) removedIds.push(edge.source, edge.target);
+      }
+    }
+    const newEdges = applyEdgeChanges(changes, currentEdges);
+    if (removedIds.length > 0) {
+      get()._pushSnapshot();
+      const ts = nowIso();
+      const ids = new Set(removedIds);
+      const newNodes = get().nodes.map((n) =>
+        ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+      );
+      const next = new Set(get().dirtyNodeIds);
+      removedIds.forEach((id) => next.add(id));
+      set({ nodes: newNodes, edges: newEdges, dirtyNodeIds: next, offlineDirty: true });
+    } else {
+      set({ edges: newEdges, offlineDirty: true });
+    }
+  },
+
+  onConnect: (connection: Connection) => {
+    get()._pushSnapshot();
+    const next = new Set(get().dirtyNodeIds);
+    const ids = new Set<string>();
+    if (connection.source) { next.add(connection.source); ids.add(connection.source); }
+    if (connection.target) { next.add(connection.target); ids.add(connection.target); }
+    const ts = nowIso();
+    const newNodes = get().nodes.map((n) =>
+      ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+    );
+    set({
+      nodes: newNodes,
+      edges: addEdge(connection, get().edges),
+      dirtyNodeIds: next,
+      offlineDirty: true,
+    });
+  },
+
+  setNodes: (nodes) => {
+    const pruned = pruneDeletedTombstonesByNodes(get().deletedNotionTombstones, nodes);
+    set({ nodes, deletedNotionTombstones: pruned });
+  },
+  setEdges: (edges) => set({ edges }),
+  replaceNodesAndEdgesForSync: (nodes, edges, notionFieldColors, replaceColors = false) => {
+    get().clearHistory();
+    let nextColors = get().notionFieldColors;
+    const pruned = pruneDeletedTombstonesByNodes(get().deletedNotionTombstones, nodes);
+    if (notionFieldColors && Object.keys(notionFieldColors).length > 0) {
+      nextColors = replaceColors
+        ? notionFieldColors
+        : Object.entries(notionFieldColors).reduce(
+          (acc, [fk, map]) => {
+            acc[fk] = { ...(acc[fk] || {}), ...map };
+            return acc;
+          },
+          { ...get().notionFieldColors }
         );
-        set({
-          nodes: newNodes,
-          edges: addEdge(connection, get().edges),
-          dirtyNodeIds: next,
-          offlineDirty: true,
-        });
-      },
+    }
+    set({
+      nodes: [...nodes],
+      edges: [...edges],
+      deletedNotionTombstones: pruned,
+      syncJustCompleted: true,
+      dirtyNodeIds: new Set<string>(),
+      ...(notionFieldColors ? { notionFieldColors: nextColors } : {}),
+    });
+  },
 
-      setNodes: (nodes) => {
-        const pruned = pruneDeletedTombstonesByNodes(get().deletedNotionTombstones, nodes);
-        set({ nodes, deletedNotionTombstones: pruned });
-      },
-      setEdges: (edges) => set({ edges }),
-      replaceNodesAndEdgesForSync: (nodes, edges, notionFieldColors, replaceColors = false) => {
-        get().clearHistory();
-        let nextColors = get().notionFieldColors;
-        const pruned = pruneDeletedTombstonesByNodes(get().deletedNotionTombstones, nodes);
-        if (notionFieldColors && Object.keys(notionFieldColors).length > 0) {
-          nextColors = replaceColors
-            ? notionFieldColors
-            : Object.entries(notionFieldColors).reduce(
-                (acc, [fk, map]) => {
-                  acc[fk] = { ...(acc[fk] || {}), ...map };
-                  return acc;
-                },
-                { ...get().notionFieldColors }
-              );
-        }
-        set({
-          nodes: [...nodes],
-          edges: [...edges],
-          deletedNotionTombstones: pruned,
-          syncJustCompleted: true,
-          dirtyNodeIds: new Set<string>(),
-          ...(notionFieldColors ? { notionFieldColors: nextColors } : {}),
-        });
-      },
+  addNode: (node) => {
+    get()._pushSnapshot();
+    const next = new Set(get().dirtyNodeIds);
+    next.add(node.id);
+    const nodeWithTs = {
+      ...node,
+      data: { ...node.data, localModifiedAt: nowIso() },
+    };
+    const nextNodes = [...get().nodes, nodeWithTs];
+    const pruned = pruneDeletedTombstonesByNodes(get().deletedNotionTombstones, nextNodes);
+    set({
+      nodes: nextNodes,
+      deletedNotionTombstones: pruned,
+      dirtyNodeIds: next,
+      offlineDirty: true,
+    });
+  },
 
-      addNode: (node) => {
-        get()._pushSnapshot();
-        const next = new Set(get().dirtyNodeIds);
-        next.add(node.id);
-        const nodeWithTs = {
-          ...node,
-          data: { ...node.data, localModifiedAt: nowIso() },
-        };
-        const nextNodes = [...get().nodes, nodeWithTs];
-        const pruned = pruneDeletedTombstonesByNodes(get().deletedNotionTombstones, nextNodes);
-        set({
-          nodes: nextNodes,
-          deletedNotionTombstones: pruned,
-          dirtyNodeIds: next,
-          offlineDirty: true,
-        });
-      },
+  deleteNodes: (nodeIds) => {
+    get()._pushSnapshot();
+    const currentNodes = get().nodes;
+    const toDelete = currentNodes.filter((node) => nodeIds.includes(node.id));
+    const nextTombstones = { ...get().deletedNotionTombstones };
+    const deletedAt = nowIso();
+    for (const node of toDelete) {
+      const notionPageId = node.data.notionPageId;
+      if (!notionPageId) continue;
+      nextTombstones[notionPageId] = {
+        notionPageId,
+        deletedAt,
+        nodeLabel: node.data.label,
+        techCraftId: node.data.techCraftId,
+      };
+    }
+    set({
+      nodes: currentNodes.filter((node) => !nodeIds.includes(node.id)),
+      edges: get().edges.filter(
+        (edge) => !nodeIds.includes(edge.source) && !nodeIds.includes(edge.target)
+      ),
+      deletedNotionTombstones: nextTombstones,
+      offlineDirty: true,
+    });
+  },
 
-      deleteNodes: (nodeIds) => {
-        get()._pushSnapshot();
-        const currentNodes = get().nodes;
-        const toDelete = currentNodes.filter((node) => nodeIds.includes(node.id));
-        const nextTombstones = { ...get().deletedNotionTombstones };
-        const deletedAt = nowIso();
-        for (const node of toDelete) {
-          const notionPageId = node.data.notionPageId;
-          if (!notionPageId) continue;
-          nextTombstones[notionPageId] = {
-            notionPageId,
-            deletedAt,
-            nodeLabel: node.data.label,
-            techCraftId: node.data.techCraftId,
-          };
-        }
-        set({
-          nodes: currentNodes.filter((node) => !nodeIds.includes(node.id)),
-          edges: get().edges.filter(
-            (edge) => !nodeIds.includes(edge.source) && !nodeIds.includes(edge.target)
-          ),
-          deletedNotionTombstones: nextTombstones,
-          offlineDirty: true,
-        });
-      },
+  updateNodeData: (id, data) => {
+    get()._pushSnapshot();
+    const next = new Set(get().dirtyNodeIds);
+    next.add(id);
+    const ts = nowIso();
+    set({
+      nodes: get().nodes.map((node) =>
+        node.id === id
+          ? { ...node, data: { ...node.data, ...data, localModifiedAt: ts } }
+          : node
+      ),
+      dirtyNodeIds: next,
+      offlineDirty: true,
+    });
+  },
 
-      updateNodeData: (id, data) => {
-        get()._pushSnapshot();
-        const next = new Set(get().dirtyNodeIds);
-        next.add(id);
+  setProjectName: (name) => set({ meta: { ...get().meta, name }, offlineDirty: true }),
+  setCurrentFileName: (name) => set({ currentFileName: name }),
+  setOfflineDirty: (dirty) => set({ offlineDirty: dirty }),
+
+  loadProject: (project) => {
+    get().clearHistory();
+    const loadedSettings = project.settings || {};
+    const loadedNodes = project.nodes || [];
+    const loadedTombstones = (project.deletedNotionTombstones || {}) as Record<
+      string,
+      DeletedNotionTombstone
+    >;
+    const pruned = pruneDeletedTombstonesByNodes(loadedTombstones, loadedNodes);
+    const state = get();
+    state.setSyncMode('pause');
+    state.setAllowBackgroundSync(false);
+    set({
+      nodes: loadedNodes,
+      edges: project.edges || [],
+      deletedNotionTombstones: pruned,
+      meta: project.meta || defaultMeta,
+      settings: { ...defaultSettings, ...loadedSettings },
+      notionFieldColors: project.notionFieldColors || {},
+      offlineDirty: false,
+    });
+  },
+
+  updateSettings: (newSettings) => set({ settings: { ...get().settings, ...newSettings } }),
+
+  // Notion actions
+  setNotionConfig: (config) => {
+    persistNotionConfig(config);
+    set({
+      notionConfig: config,
+      lastSyncTime: config ? loadLastSyncTime(config.databaseId) : null,
+      ...(config ? {} : { allowBackgroundSync: false }),
+    });
+  },
+  setNotionCorsProxy: (proxy) => {
+    localStorage.setItem('techtree_notion_cors_proxy', proxy);
+    set({ notionCorsProxy: proxy });
+  },
+  setNotionConnected: (connected) => set({
+    notionConnected: connected,
+    ...(connected ? {} : { allowBackgroundSync: false }),
+  }),
+  setSyncInProgress: (inProgress) => set({
+    syncInProgress: inProgress,
+    ...(inProgress ? {} : { syncProgress: null }),
+  }),
+  setSyncProgress: (progress) => set({ syncProgress: progress }),
+  setLastSyncResult: (result) => set({ lastSyncResult: result }),
+  setLastSyncTime: (time) => {
+    persistLastSyncTime(get().notionConfig?.databaseId, time);
+    set({ lastSyncTime: time, lastSyncError: null });
+  },
+  setLastSyncError: (error) => set({ lastSyncError: error }),
+  setNotionSourceOfTruth: (enabled) => set({
+    notionSourceOfTruth: enabled,
+    syncMode: enabled ? (get().syncMode === 'pause' ? 'bidirectional' : get().syncMode) : 'pause',
+  }),
+  setAllowBackgroundSync: (allowed) => set({ allowBackgroundSync: allowed }),
+  setSyncMode: (mode) => set({
+    syncMode: mode,
+    notionSourceOfTruth: mode !== 'pause',
+  }),
+  setNotionDirty: (dirty) => set({ notionDirty: dirty }),
+  setNotionHasRemoteUpdates: (has) => set({ notionHasRemoteUpdates: has }),
+  markNodesDirty: (ids) => {
+    const next = new Set(get().dirtyNodeIds);
+    ids.forEach((id) => next.add(id));
+    const ts = nowIso();
+    const idSet = new Set(ids);
+    const newNodes = get().nodes.map((n) =>
+      idSet.has(n.id)
+        ? { ...n, data: { ...n.data, localModifiedAt: ts, positionModifiedAt: ts } }
+        : n
+    );
+    set({ dirtyNodeIds: next, nodes: newNodes });
+  },
+  clearDirtyNodes: () => set({ dirtyNodeIds: new Set<string>() }),
+  addDeletedNotionTombstones: (entries) => {
+    const next = { ...get().deletedNotionTombstones };
+    if (Array.isArray(entries)) {
+      for (const entry of entries) {
+        if (!entry?.notionPageId) continue;
+        next[entry.notionPageId] = entry;
+      }
+    } else {
+      for (const [pageId, entry] of Object.entries(entries || {})) {
+        if (!pageId) continue;
+        next[pageId] = entry;
+      }
+    }
+    set({ deletedNotionTombstones: next, offlineDirty: true });
+  },
+  clearDeletedNotionTombstones: (pageIds) => {
+    if (!pageIds || pageIds.length === 0) return;
+    const next = { ...get().deletedNotionTombstones };
+    let changed = false;
+    for (const pageId of pageIds) {
+      if (!next[pageId]) continue;
+      delete next[pageId];
+      changed = true;
+    }
+    if (!changed) return;
+    set({ deletedNotionTombstones: next, offlineDirty: true });
+  },
+  pruneDeletedNotionTombstonesByNodes: (nodes) => {
+    const current = get().deletedNotionTombstones;
+    const pruned = pruneDeletedTombstonesByNodes(current, nodes);
+    if (pruned === current) return;
+    const sameSize = Object.keys(pruned).length === Object.keys(current).length;
+    if (sameSize) return;
+    set({ deletedNotionTombstones: pruned });
+  },
+  setSyncJustCompleted: (value) => set({ syncJustCompleted: value }),
+
+  updateEdgeWaypoints: (edgeId, waypoints, skipSnapshot = false) => {
+    if (!skipSnapshot) get()._pushSnapshot();
+    const edge = get().edges.find((e) => e.id === edgeId);
+    const wp = waypoints.length > 0 ? [...waypoints] : undefined;
+    const newEdges = get().edges.map((e) =>
+      e.id === edgeId ? { ...e, waypoints: wp } : e
+    );
+    set({ edges: newEdges, offlineDirty: true });
+    if (!skipSnapshot && edge) {
+      const ts = nowIso();
+      const ids = new Set<string>([edge.source, edge.target]);
+      const next = new Set(get().dirtyNodeIds);
+      ids.forEach((id) => next.add(id));
+      const newNodes = get().nodes.map((n) =>
+        ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+      );
+      set({ nodes: newNodes, dirtyNodeIds: next });
+    }
+  },
+
+  addEdgeWaypoint: (edgeId, segmentIndex, point) => {
+    get()._pushSnapshot();
+    const edge = get().edges.find((e) => e.id === edgeId);
+    if (!edge) return;
+    const wp = [...(edge.waypoints ?? [])];
+    wp.splice(segmentIndex, 0, point);
+    const newEdges = get().edges.map((e) =>
+      e.id === edgeId ? { ...e, waypoints: wp } : e
+    );
+    const ts = nowIso();
+    const ids = new Set<string>([edge.source, edge.target]);
+    const next = new Set(get().dirtyNodeIds);
+    ids.forEach((id) => next.add(id));
+    const newNodes = get().nodes.map((n) =>
+      ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+    );
+    set({ edges: newEdges, nodes: newNodes, dirtyNodeIds: next, offlineDirty: true });
+  },
+
+  removeEdgeWaypoint: (edgeId, waypointIndex) => {
+    get()._pushSnapshot();
+    const edge = get().edges.find((e) => e.id === edgeId);
+    if (!edge?.waypoints) return;
+    const wp = edge.waypoints.filter((_, i) => i !== waypointIndex);
+    const newEdges = get().edges.map((e) =>
+      e.id === edgeId ? { ...e, waypoints: wp.length > 0 ? wp : undefined } : e
+    );
+    const ts = nowIso();
+    const ids = new Set<string>([edge.source, edge.target]);
+    const next = new Set(get().dirtyNodeIds);
+    ids.forEach((id) => next.add(id));
+    const newNodes = get().nodes.map((n) =>
+      ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
+    );
+    set({ edges: newEdges, nodes: newNodes, dirtyNodeIds: next, offlineDirty: true });
+  },
+
+  setCanvasFilter: (filter) => {
+    const current = get().canvasFilter;
+    const next = { ...current, ...filter };
+    if (next.rules?.length) {
+      next.rules = next.rules.map((r) =>
+        (r.property as string) === 'formulaUsedStation' ? { ...r, property: 'usedStation' as const } : r
+      );
+    }
+    next.enabled = (next.rules?.length ?? 0) > 0;
+    set({ canvasFilter: next });
+  },
+
+  setConnectedSubgraphHighlight: (ids) => set({ connectedSubgraphHighlight: ids }),
+
+  setModalOpen: (modal, isOpen) => set({ modals: { ...get().modals, [modal]: isOpen } }),
+  setManualSyncMode: (mode) => set({ manualSyncMode: mode }),
+  setManualSyncConflicts: (conflicts) => set({ manualSyncConflicts: conflicts }),
+  applyRemoteFieldToGraph: (nodeId, field, value) => {
+    get()._pushSnapshot();
+    const nodes = get().nodes;
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    if (field === 'position') {
+      const pos = value as { x: number; y: number };
+      if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
         const ts = nowIso();
-        set({
-          nodes: get().nodes.map((node) =>
-            node.id === id
-              ? { ...node, data: { ...node.data, ...data, localModifiedAt: ts } }
-              : node
-          ),
-          dirtyNodeIds: next,
-          offlineDirty: true,
-        });
-      },
-
-      setProjectName: (name) => set({ meta: { ...get().meta, name }, offlineDirty: true }),
-      setCurrentFileName: (name) => set({ currentFileName: name }),
-      setOfflineDirty: (dirty) => set({ offlineDirty: dirty }),
-
-      loadProject: (project) => {
-        get().clearHistory();
-        const loadedSettings = project.settings || {};
-        const loadedNodes = project.nodes || [];
-        const loadedTombstones = (project.deletedNotionTombstones || {}) as Record<
-          string,
-          DeletedNotionTombstone
-        >;
-        const pruned = pruneDeletedTombstonesByNodes(loadedTombstones, loadedNodes);
-        const state = get();
-        state.setSyncMode('pause');
-        state.setAllowBackgroundSync(false);
-        set({
-          nodes: loadedNodes,
-          edges: project.edges || [],
-          deletedNotionTombstones: pruned,
-          meta: project.meta || defaultMeta,
-          settings: { ...defaultSettings, ...loadedSettings },
-          notionFieldColors: project.notionFieldColors || {},
-          offlineDirty: false,
-        });
-      },
-
-      updateSettings: (newSettings) => set({ settings: { ...get().settings, ...newSettings } }),
-
-      // Notion actions
-      setNotionConfig: (config) => {
-        persistNotionConfig(config);
-        set({
-          notionConfig: config,
-          lastSyncTime: config ? loadLastSyncTime(config.databaseId) : null,
-          ...(config ? {} : { allowBackgroundSync: false }),
-        });
-      },
-      setNotionCorsProxy: (proxy) => {
-        localStorage.setItem('techtree_notion_cors_proxy', proxy);
-        set({ notionCorsProxy: proxy });
-      },
-      setNotionConnected: (connected) => set({
-        notionConnected: connected,
-        ...(connected ? {} : { allowBackgroundSync: false }),
-      }),
-      setSyncInProgress: (inProgress) => set({
-        syncInProgress: inProgress,
-        ...(inProgress ? {} : { syncProgress: null }),
-      }),
-      setSyncProgress: (progress) => set({ syncProgress: progress }),
-      setLastSyncResult: (result) => set({ lastSyncResult: result }),
-      setLastSyncTime: (time) => {
-        persistLastSyncTime(get().notionConfig?.databaseId, time);
-        set({ lastSyncTime: time, lastSyncError: null });
-      },
-      setLastSyncError: (error) => set({ lastSyncError: error }),
-      setNotionSourceOfTruth: (enabled) => set({
-        notionSourceOfTruth: enabled,
-        syncMode: enabled ? (get().syncMode === 'pause' ? 'bidirectional' : get().syncMode) : 'pause',
-      }),
-      setAllowBackgroundSync: (allowed) => set({ allowBackgroundSync: allowed }),
-      setSyncMode: (mode) => set({
-        syncMode: mode,
-        notionSourceOfTruth: mode !== 'pause',
-      }),
-      setNotionDirty: (dirty) => set({ notionDirty: dirty }),
-      setNotionHasRemoteUpdates: (has) => set({ notionHasRemoteUpdates: has }),
-      markNodesDirty: (ids) => {
-        const next = new Set(get().dirtyNodeIds);
-        ids.forEach((id) => next.add(id));
-        const ts = nowIso();
-        const idSet = new Set(ids);
-        const newNodes = get().nodes.map((n) =>
-          idSet.has(n.id)
-            ? { ...n, data: { ...n.data, localModifiedAt: ts, positionModifiedAt: ts } }
+        const next = nodes.map((n) =>
+          n.id === nodeId
+            ? { ...n, position: { x: pos.x, y: pos.y }, data: { ...n.data, positionModifiedAt: ts } }
             : n
         );
-        set({ dirtyNodeIds: next, nodes: newNodes });
-      },
-      clearDirtyNodes: () => set({ dirtyNodeIds: new Set<string>() }),
-      addDeletedNotionTombstones: (entries) => {
-        const next = { ...get().deletedNotionTombstones };
-        if (Array.isArray(entries)) {
-          for (const entry of entries) {
-            if (!entry?.notionPageId) continue;
-            next[entry.notionPageId] = entry;
-          }
-        } else {
-          for (const [pageId, entry] of Object.entries(entries || {})) {
-            if (!pageId) continue;
-            next[pageId] = entry;
-          }
-        }
-        set({ deletedNotionTombstones: next, offlineDirty: true });
-      },
-      clearDeletedNotionTombstones: (pageIds) => {
-        if (!pageIds || pageIds.length === 0) return;
-        const next = { ...get().deletedNotionTombstones };
-        let changed = false;
-        for (const pageId of pageIds) {
-          if (!next[pageId]) continue;
-          delete next[pageId];
-          changed = true;
-        }
-        if (!changed) return;
-        set({ deletedNotionTombstones: next, offlineDirty: true });
-      },
-      pruneDeletedNotionTombstonesByNodes: (nodes) => {
-        const current = get().deletedNotionTombstones;
-        const pruned = pruneDeletedTombstonesByNodes(current, nodes);
-        if (pruned === current) return;
-        const sameSize = Object.keys(pruned).length === Object.keys(current).length;
-        if (sameSize) return;
-        set({ deletedNotionTombstones: pruned });
-      },
-      setSyncJustCompleted: (value) => set({ syncJustCompleted: value }),
+        const nextDirty = new Set(get().dirtyNodeIds);
+        nextDirty.add(nodeId);
+        set({ nodes: next, dirtyNodeIds: nextDirty, offlineDirty: true });
+      }
+    } else {
+      get().updateNodeData(nodeId, { [field]: value });
+    }
+  },
+  forceShowStartupModal: false,
+  setForceShowStartupModal: (value) => set({ forceShowStartupModal: value }),
+  unsavedChangesResolve: null,
+  setUnsavedChangesResolve: (fn) => set({ unsavedChangesResolve: fn }),
+  saveConfirmResolve: null,
+  setSaveConfirmResolve: (fn) => set({ saveConfirmResolve: fn }),
 
-      updateEdgeWaypoints: (edgeId, waypoints, skipSnapshot = false) => {
-        if (!skipSnapshot) get()._pushSnapshot();
-        const edge = get().edges.find((e) => e.id === edgeId);
-        const wp = waypoints.length > 0 ? [...waypoints] : undefined;
-        const newEdges = get().edges.map((e) =>
-          e.id === edgeId ? { ...e, waypoints: wp } : e
-        );
-        set({ edges: newEdges, offlineDirty: true });
-        if (!skipSnapshot && edge) {
-          const ts = nowIso();
-          const ids = new Set<string>([edge.source, edge.target]);
-          const next = new Set(get().dirtyNodeIds);
-          ids.forEach((id) => next.add(id));
-          const newNodes = get().nodes.map((n) =>
-            ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
-          );
-          set({ nodes: newNodes, dirtyNodeIds: next });
-        }
-      },
-
-      addEdgeWaypoint: (edgeId, segmentIndex, point) => {
-        get()._pushSnapshot();
-        const edge = get().edges.find((e) => e.id === edgeId);
-        if (!edge) return;
-        const wp = [...(edge.waypoints ?? [])];
-        wp.splice(segmentIndex, 0, point);
-        const newEdges = get().edges.map((e) =>
-          e.id === edgeId ? { ...e, waypoints: wp } : e
-        );
-        const ts = nowIso();
-        const ids = new Set<string>([edge.source, edge.target]);
-        const next = new Set(get().dirtyNodeIds);
-        ids.forEach((id) => next.add(id));
-        const newNodes = get().nodes.map((n) =>
-          ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
-        );
-        set({ edges: newEdges, nodes: newNodes, dirtyNodeIds: next, offlineDirty: true });
-      },
-
-      removeEdgeWaypoint: (edgeId, waypointIndex) => {
-        get()._pushSnapshot();
-        const edge = get().edges.find((e) => e.id === edgeId);
-        if (!edge?.waypoints) return;
-        const wp = edge.waypoints.filter((_, i) => i !== waypointIndex);
-        const newEdges = get().edges.map((e) =>
-          e.id === edgeId ? { ...e, waypoints: wp.length > 0 ? wp : undefined } : e
-        );
-        const ts = nowIso();
-        const ids = new Set<string>([edge.source, edge.target]);
-        const next = new Set(get().dirtyNodeIds);
-        ids.forEach((id) => next.add(id));
-        const newNodes = get().nodes.map((n) =>
-          ids.has(n.id) ? { ...n, data: { ...n.data, localModifiedAt: ts } } : n
-        );
-        set({ edges: newEdges, nodes: newNodes, dirtyNodeIds: next, offlineDirty: true });
-      },
-
-      setCanvasFilter: (filter) => {
-        const current = get().canvasFilter;
-        const next = { ...current, ...filter };
-        if (next.rules?.length) {
-          next.rules = next.rules.map((r) =>
-            r.property === 'formulaUsedStation' ? { ...r, property: 'usedStation' as const } : r
-          );
-        }
-        next.enabled = (next.rules?.length ?? 0) > 0;
-        set({ canvasFilter: next });
-      },
-
-      setConnectedSubgraphHighlight: (ids) => set({ connectedSubgraphHighlight: ids }),
-
-      setModalOpen: (modal, isOpen) => set({ modals: { ...get().modals, [modal]: isOpen } }),
-      setManualSyncMode: (mode) => set({ manualSyncMode: mode }),
-      setManualSyncConflicts: (conflicts) => set({ manualSyncConflicts: conflicts }),
-      applyRemoteFieldToGraph: (nodeId, field, value) => {
-        get()._pushSnapshot();
-        const nodes = get().nodes;
-        const node = nodes.find((n) => n.id === nodeId);
-        if (!node) return;
-        if (field === 'position') {
-          const pos = value as { x: number; y: number };
-          if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-            const ts = nowIso();
-            const next = nodes.map((n) =>
-              n.id === nodeId
-                ? { ...n, position: { x: pos.x, y: pos.y }, data: { ...n.data, positionModifiedAt: ts } }
-                : n
-            );
-            const nextDirty = new Set(get().dirtyNodeIds);
-            nextDirty.add(nodeId);
-            set({ nodes: next, dirtyNodeIds: nextDirty, offlineDirty: true });
-          }
-        } else {
-          get().updateNodeData(nodeId, { [field]: value });
-        }
-      },
-      forceShowStartupModal: false,
-      setForceShowStartupModal: (value) => set({ forceShowStartupModal: value }),
-      unsavedChangesResolve: null,
-      setUnsavedChangesResolve: (fn) => set({ unsavedChangesResolve: fn }),
-
-      // UI Actions
-      toggleSidebar: () => set((state) => ({ ui: { ...state.ui, sidebarOpen: !state.ui.sidebarOpen } })),
-      toggleInspector: () => set((state) => ({ ui: { ...state.ui, inspectorOpen: !state.ui.inspectorOpen } })),
-      setTheme: (theme) => {
-        localStorage.setItem(THEME_STORAGE_KEY, theme);
-        set((state) => ({ ui: { ...state.ui, theme } }));
-      },
+  // UI Actions
+  toggleSidebar: () => set((state) => ({ ui: { ...state.ui, sidebarOpen: !state.ui.sidebarOpen } })),
+  toggleInspector: () => set((state) => ({ ui: { ...state.ui, inspectorOpen: !state.ui.inspectorOpen } })),
+  setTheme: (theme) => {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    set((state) => ({ ui: { ...state.ui, theme } }));
+  },
 }));

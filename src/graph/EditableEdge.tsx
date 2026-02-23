@@ -238,7 +238,7 @@ const EditableEdge: React.FC<Props> = ({
 
   const svgPath = useMemo(() => {
     if (effectiveWaypoints.length === 0 && waypoints.length === 0) {
-      if (edgeType === 'straight') return getStraightPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })[0];
+      if (edgeType === 'straight') return getStraightPath({ sourceX, sourceY, targetX, targetY })[0];
       if (edgeType === 'default') return getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })[0];
       return `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
     }
@@ -263,7 +263,19 @@ const EditableEdge: React.FC<Props> = ({
       const currentWps = useStore.getState().edges.find((e) => e.id === id)?.waypoints ?? [];
       const next = [...currentWps];
       if (idx >= 0 && idx < next.length) {
-        next[idx] = effectiveGridSize > 0 ? snapToGrid(pos.x, pos.y, effectiveGridSize) : { x: pos.x, y: pos.y };
+        let snappedPt = effectiveGridSize > 0 ? snapToGrid(pos.x, pos.y, effectiveGridSize) : { x: pos.x, y: pos.y };
+
+        // Smart snapping to source/target handles
+        if (effectiveGridSize > 0) {
+          const snapThreshold = effectiveGridSize;
+          if (Math.abs(pos.x - sourceX) < snapThreshold) snappedPt.x = sourceX;
+          else if (Math.abs(pos.x - targetX) < snapThreshold) snappedPt.x = targetX;
+
+          if (Math.abs(pos.y - sourceY) < snapThreshold) snappedPt.y = sourceY;
+          else if (Math.abs(pos.y - targetY) < snapThreshold) snappedPt.y = targetY;
+        }
+
+        next[idx] = snappedPt;
         updateEdgeWaypoints(id, next, true);
       }
     };
@@ -290,7 +302,18 @@ const EditableEdge: React.FC<Props> = ({
   const handleAddWaypoint = useCallback((e: React.MouseEvent, segmentIdx: number) => {
     e.stopPropagation();
     const mp = mid(allPoints[segmentIdx], allPoints[segmentIdx + 1]);
-    const pt = effectiveGridSize > 0 ? snapToGrid(mp.x, mp.y, effectiveGridSize) : { x: mp.x, y: mp.y };
+    let pt = effectiveGridSize > 0 ? snapToGrid(mp.x, mp.y, effectiveGridSize) : { x: mp.x, y: mp.y };
+
+    // Smart snapping to source/target handles
+    if (effectiveGridSize > 0) {
+      const snapThreshold = effectiveGridSize;
+      if (Math.abs(mp.x - sourceX) < snapThreshold) pt.x = sourceX;
+      else if (Math.abs(mp.x - targetX) < snapThreshold) pt.x = targetX;
+
+      if (Math.abs(mp.y - sourceY) < snapThreshold) pt.y = sourceY;
+      else if (Math.abs(mp.y - targetY) < snapThreshold) pt.y = targetY;
+    }
+
     addEdgeWaypoint(id, segmentIdx, pt);
   }, [id, allPoints, addEdgeWaypoint, effectiveGridSize]);
 
@@ -300,7 +323,17 @@ const EditableEdge: React.FC<Props> = ({
     e.stopPropagation(); e.preventDefault();
     pushSnapshot();
     const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    const wp = effectiveGridSize > 0 ? snapToGrid(flowPos.x, flowPos.y, effectiveGridSize) : { x: flowPos.x, y: flowPos.y };
+
+    let wp = effectiveGridSize > 0 ? snapToGrid(flowPos.x, flowPos.y, effectiveGridSize) : { x: flowPos.x, y: flowPos.y };
+    // Smart snapping to source/target handles
+    if (effectiveGridSize > 0) {
+      const snapThreshold = effectiveGridSize;
+      if (Math.abs(flowPos.x - sourceX) < snapThreshold) wp.x = sourceX;
+      else if (Math.abs(flowPos.x - targetX) < snapThreshold) wp.x = targetX;
+
+      if (Math.abs(flowPos.y - sourceY) < snapThreshold) wp.y = sourceY;
+      else if (Math.abs(flowPos.y - targetY) < snapThreshold) wp.y = targetY;
+    }
     const segIdx = findNearestSegment(wp, allPoints, pathStyle);
     addEdgeWaypoint(id, segIdx, wp);
     const newIdx = segIdx;
@@ -311,7 +344,19 @@ const EditableEdge: React.FC<Props> = ({
       const currentWps = useStore.getState().edges.find((e) => e.id === id)?.waypoints ?? [];
       const next = [...currentWps];
       if (next[newIdx]) {
-        next[newIdx] = effectiveGridSize > 0 ? snapToGrid(pos.x, pos.y, effectiveGridSize) : { x: pos.x, y: pos.y };
+        let snappedPt = effectiveGridSize > 0 ? snapToGrid(pos.x, pos.y, effectiveGridSize) : { x: pos.x, y: pos.y };
+
+        // Smart snapping to source/target handles
+        if (effectiveGridSize > 0) {
+          const snapThreshold = effectiveGridSize;
+          if (Math.abs(pos.x - sourceX) < snapThreshold) snappedPt.x = sourceX;
+          else if (Math.abs(pos.x - targetX) < snapThreshold) snappedPt.x = targetX;
+
+          if (Math.abs(pos.y - sourceY) < snapThreshold) snappedPt.y = sourceY;
+          else if (Math.abs(pos.y - targetY) < snapThreshold) snappedPt.y = targetY;
+        }
+
+        next[newIdx] = snappedPt;
         updateEdgeWaypoints(id, next, true);
       }
     };
@@ -346,7 +391,18 @@ const EditableEdge: React.FC<Props> = ({
   const ctxAddWaypoint = useCallback(() => {
     if (!ctxMenu) return;
     const segIdx = findNearestSegment(ctxMenu.flowPos, allPoints, pathStyle);
-    const pt = effectiveGridSize > 0 ? snapToGrid(ctxMenu.flowPos.x, ctxMenu.flowPos.y, effectiveGridSize) : { x: ctxMenu.flowPos.x, y: ctxMenu.flowPos.y };
+    let pt = effectiveGridSize > 0 ? snapToGrid(ctxMenu.flowPos.x, ctxMenu.flowPos.y, effectiveGridSize) : { x: ctxMenu.flowPos.x, y: ctxMenu.flowPos.y };
+
+    // Smart snapping to source/target handles
+    if (effectiveGridSize > 0) {
+      const snapThreshold = effectiveGridSize;
+      if (Math.abs(ctxMenu.flowPos.x - sourceX) < snapThreshold) pt.x = sourceX;
+      else if (Math.abs(ctxMenu.flowPos.x - targetX) < snapThreshold) pt.x = targetX;
+
+      if (Math.abs(ctxMenu.flowPos.y - sourceY) < snapThreshold) pt.y = sourceY;
+      else if (Math.abs(ctxMenu.flowPos.y - targetY) < snapThreshold) pt.y = targetY;
+    }
+
     addEdgeWaypoint(id, segIdx, pt);
     setCtxMenu(null);
   }, [ctxMenu, allPoints, id, addEdgeWaypoint, pathStyle, effectiveGridSize]);

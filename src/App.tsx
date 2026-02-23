@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar } from './components/Sidebar';
@@ -13,6 +13,7 @@ import { StartupModal } from './components/StartupModal';
 import { NotionSyncModal } from './components/NotionSyncModal';
 import { ManualSyncModal } from './components/ManualSyncModal';
 import { UnsavedChangesModal } from './components/UnsavedChangesModal';
+import { SaveConfirmModal } from './components/SaveConfirmModal';
 import { StatusBar } from './components/StatusBar';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useNotionAutoSave } from './hooks/useNotionAutoSave';
@@ -136,6 +137,7 @@ function App() {
       <NotionSyncModal />
       <ManualSyncModal />
       <UnsavedChangesModal />
+      <SaveConfirmModal />
     </ReactFlowProvider>
   );
 }

@@ -107,13 +107,13 @@ export const Graph = () => {
       selectable: true,
       ...(manualEdgeMode
         ? {
-            data: {
-              waypoints: e.waypoints ?? [],
-              edgeType,
-              edgeStrokeWidth,
-              edgeAnimated,
-            },
-          }
+          data: {
+            waypoints: e.waypoints ?? [],
+            edgeType,
+            edgeStrokeWidth,
+            edgeAnimated,
+          },
+        }
         : {}),
     }));
 

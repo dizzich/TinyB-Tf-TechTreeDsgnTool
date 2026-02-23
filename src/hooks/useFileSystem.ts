@@ -5,30 +5,36 @@ import { ProjectFile } from '../types';
 export const useFileSystem = () => {
   const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(null);
 
-  const saveProject = useCallback(async (projectData: ProjectFile) => {
+  const saveProject = useCallback(async (projectData: ProjectFile, forceNew = false): Promise<{ fileName: string } | undefined> => {
     const jsonString = JSON.stringify(projectData, null, 2);
 
     // Try Native File System API
     if ('showSaveFilePicker' in window) {
       try {
-        const handle = fileHandle || await (window as any).showSaveFilePicker({
-          types: [{
-            description: 'TechTree Studio Project',
-            accept: { 'application/json': ['.json'] },
-          }],
-        });
-        
+        let handle = fileHandle;
+        if (forceNew || !handle) {
+          handle = await (window as any).showSaveFilePicker({
+            types: [{
+              description: 'TechTree Studio Project',
+              accept: { 'application/json': ['.json'] },
+            }],
+          });
+        }
+        if (!handle) {
+          throw new Error('No file handle obtained');
+        }
+
         setFileHandle(handle);
         const writable = await handle.createWritable();
         await writable.write(jsonString);
         await writable.close();
-        return;
+        return { fileName: handle.name };
       } catch (err: any) {
         if (err.name !== 'AbortError') {
-             console.error('File Save Error:', err);
-             // Fallback if user cancels or API fails weirdly
+          console.error('File Save Error:', err);
+          // Fallback if user cancels or API fails weirdly
         } else {
-            return; // User cancelled
+          return; // User cancelled
         }
       }
     }
