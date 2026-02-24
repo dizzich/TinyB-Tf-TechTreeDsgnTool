@@ -9,7 +9,7 @@ import {
   type EdgeProps,
 } from '@xyflow/react';
 import { useStore } from '../store/useStore';
-import { snapToGrid } from '../utils/snapToGrid';
+import { getDefaultCornerWaypoints } from '../utils/orthogonalRouter';
 import type { EdgeWaypoint } from '../types';
 import type { EdgeType } from '../types';
 
@@ -172,19 +172,6 @@ function normalizePtsForOrthogonal(pts: EdgeWaypoint[]): EdgeWaypoint[] {
   return out;
 }
 
-/** Default corner waypoints for step/smoothstep with no user waypoints.
- *  Returns two axis-aligned corners that form a clean L-shape. */
-function getDefaultCornerWaypoints(
-  sx: number, sy: number, tx: number, ty: number, gridSize = 10
-): EdgeWaypoint[] {
-  if (Math.abs(sy - ty) < 0.5 || Math.abs(sx - tx) < 0.5) return [];
-  const mxVal = (sx + tx) / 2;
-  const { x: mx } = snapToGrid(mxVal, sy, gridSize);
-  const { y: y0 } = snapToGrid(sx, sy, gridSize);
-  const { y: y1 } = snapToGrid(sx, ty, gridSize);
-  return [{ x: mx, y: y0 }, { x: mx, y: y1 }];
-}
-
 // ---- Context menu state ----
 interface CtxMenu {
   x: number;
@@ -231,10 +218,10 @@ const EditableEdge: React.FC<Props> = ({
 
   const effectiveWaypoints = useMemo(() => {
     if (hasSquareCorners && waypoints.length === 0) {
-      return getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY, effectiveGridSize);
+      return getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY);
     }
     return waypoints;
-  }, [hasSquareCorners, waypoints, sourceX, sourceY, targetX, targetY, effectiveGridSize]);
+  }, [hasSquareCorners, waypoints, sourceX, sourceY, targetX, targetY]);
 
   const svgPath = useMemo(() => {
     if (effectiveWaypoints.length === 0 && waypoints.length === 0) {
@@ -255,7 +242,7 @@ const EditableEdge: React.FC<Props> = ({
     e.stopPropagation(); e.preventDefault();
     pushSnapshot();
     if (hasSquareCorners && waypoints.length === 0) {
-      updateEdgeWaypoints(id, [...getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY, effectiveGridSize)], true);
+      updateEdgeWaypoints(id, [...getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY)], true);
     }
     setDragging(idx);
     const onMove = (ev: PointerEvent) => {
@@ -263,7 +250,7 @@ const EditableEdge: React.FC<Props> = ({
       const currentWps = useStore.getState().edges.find((e) => e.id === id)?.waypoints ?? [];
       const next = [...currentWps];
       if (idx >= 0 && idx < next.length) {
-        let snappedPt = effectiveGridSize > 0 ? snapToGrid(pos.x, pos.y, effectiveGridSize) : { x: pos.x, y: pos.y };
+        let snappedPt = { x: pos.x, y: pos.y };
 
         // Smart snapping to source/target handles
         if (effectiveGridSize > 0) {
@@ -293,16 +280,16 @@ const EditableEdge: React.FC<Props> = ({
   const handleWpDoubleClick = useCallback((e: React.MouseEvent, idx: number) => {
     e.stopPropagation();
     if (hasSquareCorners && waypoints.length === 0) {
-      updateEdgeWaypoints(id, [...getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY, effectiveGridSize)], true);
+      updateEdgeWaypoints(id, [...getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY)], true);
     }
     removeEdgeWaypoint(id, idx);
-  }, [id, removeEdgeWaypoint, hasSquareCorners, waypoints.length, updateEdgeWaypoints, sourceX, sourceY, targetX, targetY, effectiveGridSize]);
+  }, [id, removeEdgeWaypoint, hasSquareCorners, waypoints.length, updateEdgeWaypoints, sourceX, sourceY, targetX, targetY]);
 
   // ---- Click "+" to add waypoint at segment midpoint ----
   const handleAddWaypoint = useCallback((e: React.MouseEvent, segmentIdx: number) => {
     e.stopPropagation();
     const mp = mid(allPoints[segmentIdx], allPoints[segmentIdx + 1]);
-    let pt = effectiveGridSize > 0 ? snapToGrid(mp.x, mp.y, effectiveGridSize) : { x: mp.x, y: mp.y };
+    let pt = { x: mp.x, y: mp.y };
 
     // Smart snapping to source/target handles
     if (effectiveGridSize > 0) {
@@ -315,7 +302,7 @@ const EditableEdge: React.FC<Props> = ({
     }
 
     addEdgeWaypoint(id, segmentIdx, pt);
-  }, [id, allPoints, addEdgeWaypoint, effectiveGridSize]);
+  }, [id, allPoints, addEdgeWaypoint]);
 
   // ---- Drag on connector line to insert + immediately drag new waypoint ----
   const handleLineDragStart = useCallback((e: React.PointerEvent) => {
@@ -324,7 +311,7 @@ const EditableEdge: React.FC<Props> = ({
     pushSnapshot();
     const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
 
-    let wp = effectiveGridSize > 0 ? snapToGrid(flowPos.x, flowPos.y, effectiveGridSize) : { x: flowPos.x, y: flowPos.y };
+    let wp = { x: flowPos.x, y: flowPos.y };
     // Smart snapping to source/target handles
     if (effectiveGridSize > 0) {
       const snapThreshold = effectiveGridSize;
@@ -344,7 +331,7 @@ const EditableEdge: React.FC<Props> = ({
       const currentWps = useStore.getState().edges.find((e) => e.id === id)?.waypoints ?? [];
       const next = [...currentWps];
       if (next[newIdx]) {
-        let snappedPt = effectiveGridSize > 0 ? snapToGrid(pos.x, pos.y, effectiveGridSize) : { x: pos.x, y: pos.y };
+        let snappedPt = { x: pos.x, y: pos.y };
 
         // Smart snapping to source/target handles
         if (effectiveGridSize > 0) {
@@ -368,7 +355,7 @@ const EditableEdge: React.FC<Props> = ({
     };
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
-  }, [id, allPoints, addEdgeWaypoint, updateEdgeWaypoints, screenToFlowPosition, pushSnapshot, pathStyle, effectiveGridSize]);
+  }, [id, allPoints, addEdgeWaypoint, updateEdgeWaypoints, screenToFlowPosition, pushSnapshot, pathStyle]);
 
   // ---- Right-click on edge line ----
   const handleEdgeContextMenu = useCallback((e: React.MouseEvent) => {
@@ -381,17 +368,17 @@ const EditableEdge: React.FC<Props> = ({
   const handleWpContextMenu = useCallback((e: React.MouseEvent, idx: number) => {
     e.preventDefault(); e.stopPropagation();
     if (hasSquareCorners && waypoints.length === 0) {
-      updateEdgeWaypoints(id, [...getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY, effectiveGridSize)], true);
+      updateEdgeWaypoints(id, [...getDefaultCornerWaypoints(sourceX, sourceY, targetX, targetY)], true);
     }
     const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
     setCtxMenu({ x: e.clientX, y: e.clientY, type: 'waypoint', waypointIdx: idx, flowPos });
-  }, [screenToFlowPosition, hasSquareCorners, waypoints.length, updateEdgeWaypoints, id, sourceX, sourceY, targetX, targetY, effectiveGridSize]);
+  }, [screenToFlowPosition, hasSquareCorners, waypoints.length, updateEdgeWaypoints, id, sourceX, sourceY, targetX, targetY]);
 
   // ---- Context menu actions ----
   const ctxAddWaypoint = useCallback(() => {
     if (!ctxMenu) return;
     const segIdx = findNearestSegment(ctxMenu.flowPos, allPoints, pathStyle);
-    let pt = effectiveGridSize > 0 ? snapToGrid(ctxMenu.flowPos.x, ctxMenu.flowPos.y, effectiveGridSize) : { x: ctxMenu.flowPos.x, y: ctxMenu.flowPos.y };
+    let pt = { x: ctxMenu.flowPos.x, y: ctxMenu.flowPos.y };
 
     // Smart snapping to source/target handles
     if (effectiveGridSize > 0) {
