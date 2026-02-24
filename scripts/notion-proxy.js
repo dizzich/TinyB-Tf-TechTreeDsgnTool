@@ -5,7 +5,10 @@
  * https://api.notion.com/v1/…, preserving Authorization and
  * Notion-Version headers while stripping browser-specific ones.
  *
- * Forces IPv4 to avoid IPv6 connectivity issues on some servers.
+ * Uses fetch() — same approach as the Vite dev proxy plugin — to
+ * ensure identical behaviour between dev and production.
+ *
+ * Requires Node 18+ (built-in fetch).
  *
  * Usage:
  *   node notion-proxy.js            # listens on 3002
@@ -13,68 +16,80 @@
  */
 
 const http = require('http');
-const https = require('https');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
 const NOTION_HOST = 'api.notion.com';
 
-// Browser-specific headers that must NOT be forwarded to Notion API
-// (same set that the Vite dev proxy strips)
-const SKIP_HEADERS = new Set([
-    'host',
-    'origin',
-    'referer',
-    'accept-encoding',
-    'connection',
-    'cookie',
-    'sec-fetch-mode',
-    'sec-fetch-site',
-    'sec-fetch-dest',
-    'sec-ch-ua',
-    'sec-ch-ua-mobile',
-    'sec-ch-ua-platform',
+// Only forward headers that Notion API actually needs.
+// Whitelist approach prevents Apache-added headers (X-Forwarded-*, Via, etc.)
+// from reaching Notion and causing "invalid_request_url" errors.
+const ALLOW_HEADERS = new Set([
+    'authorization',
+    'notion-version',
+    'content-type',
+    'accept',
+    'user-agent',
 ]);
 
-const server = http.createServer((req, res) => {
-    // Build target path:  /databases/xxx  →  /v1/databases/xxx
-    const targetPath = '/v1' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+const server = http.createServer(async (req, res) => {
+    const subPath = req.url || '/';
+    const targetPath = `/v1${subPath.startsWith('/') ? '' : '/'}${subPath}`;
+    const targetUrl = `https://${NOTION_HOST}${targetPath}`;
 
-    // Forward only safe headers
+    // Forward only whitelisted headers (prevents Apache proxy headers from leaking)
     const headers = {};
     for (const [k, v] of Object.entries(req.headers)) {
-        if (v && !SKIP_HEADERS.has(k.toLowerCase())) {
-            headers[k] = Array.isArray(v) ? v[0] : v;
+        if (v && ALLOW_HEADERS.has(k.toLowerCase())) {
+            headers[k] = Array.isArray(v) ? v[0] : String(v);
         }
     }
     headers['host'] = NOTION_HOST;
 
-    console.log(`[notion-proxy] ${req.method} ${req.url} → https://${NOTION_HOST}${targetPath}`);
+    console.log(`[notion-proxy] ${req.method} ${req.url} → ${targetUrl}`);
 
-    const proxyReq = https.request({
-        hostname: NOTION_HOST,
-        port: 443,
-        path: targetPath,
-        method: req.method,
-        headers,
-        family: 4, // Force IPv4
-    }, (proxyRes) => {
-        // Strip transfer/connection headers to avoid double-encoding
-        const skipRes = new Set(['transfer-encoding', 'connection', 'content-encoding']);
-        const resHeaders = {};
-        for (const [k, v] of Object.entries(proxyRes.headers)) {
-            if (!skipRes.has(k)) resHeaders[k] = v;
+    try {
+        // Read request body for POST/PATCH/PUT (same as Vite plugin)
+        let body;
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+            body = await new Promise((resolve, reject) => {
+                const chunks = [];
+                req.on('data', (c) => chunks.push(c));
+                req.on('end', () => resolve(Buffer.concat(chunks)));
+                req.on('error', reject);
+            });
         }
-        res.writeHead(proxyRes.statusCode, resHeaders);
-        proxyRes.pipe(res, { end: true });
-    });
 
-    proxyReq.on('error', (err) => {
+        const notionRes = await fetch(targetUrl, {
+            method: req.method || 'GET',
+            headers,
+            body,
+        });
+
+        // Strip encoding/length headers to avoid double-compression
+        // (fetch auto-decompresses — same as Vite plugin)
+        const skipResHeaders = new Set([
+            'transfer-encoding', 'content-encoding', 'content-length',
+        ]);
+        res.statusCode = notionRes.status;
+        notionRes.headers.forEach((v, k) => {
+            if (!skipResHeaders.has(k.toLowerCase())) {
+                res.setHeader(k, v);
+            }
+        });
+
+        const responseBuffer = Buffer.from(await notionRes.arrayBuffer());
+        res.setHeader('content-length', String(responseBuffer.length));
+
+        if (notionRes.status >= 400) {
+            console.log(`[notion-proxy] Error ${notionRes.status}:`, responseBuffer.toString().slice(0, 500));
+        }
+
+        res.end(responseBuffer);
+    } catch (err) {
         console.error('[notion-proxy] error:', err.message);
         res.writeHead(502, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Proxy error', message: err.message }));
-    });
-
-    req.pipe(proxyReq, { end: true });
+    }
 });
 
 server.listen(PORT, '127.0.0.1', () => {
