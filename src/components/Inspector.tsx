@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Trash2, ChevronDown, ChevronRight, Copy, ArrowRight, ArrowLeft, Link } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronRight, Copy, ArrowRight, ArrowLeft, Link, Search } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useReactFlow } from '@xyflow/react';
 import { resolveNodeColor } from '../utils/colorMapping';
@@ -166,6 +166,63 @@ export const Inspector = () => {
 
   const [rawDataCollapsed, setRawDataCollapsed] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Function to highlight nodes by parameter matching
+  const highlightNodesByParameter = (paramKey: string, paramValues: string[]) => {
+    const matchingNodeIds = new Set<string>();
+    
+    // Find all nodes with matching parameter values
+    nodes.forEach(node => {
+      const nodeData = node.data;
+      let hasMatch = false;
+      
+      switch (paramKey) {
+        case 'openCondition':
+          // Check openConditionRefs first
+          if (nodeData.openConditionRefs?.length) {
+            hasMatch = nodeData.openConditionRefs.some((ref: { name: string }) => 
+              paramValues.some(v => ref.name.toLowerCase() === v.toLowerCase())
+            );
+          } else if (nodeData.openCondition) {
+            // Split string by comma and check each value
+            const values = nodeData.openCondition.split(',').map((s: string) => s.trim().toLowerCase());
+            hasMatch = paramValues.some(v => values.includes(v.toLowerCase()));
+          }
+          break;
+          
+        case 'ingredients':
+          if (nodeData.ingredients?.length) {
+            hasMatch = nodeData.ingredients.some((ing: { name: string }) => 
+              paramValues.some(v => ing.name.toLowerCase() === v.toLowerCase())
+            );
+          }
+          break;
+          
+        case 'usedStations':
+          if (nodeData.usedStations?.length) {
+            hasMatch = nodeData.usedStations.some((station: { name: string }) => 
+              paramValues.some(v => station.name.toLowerCase() === v.toLowerCase())
+            );
+          }
+          break;
+      }
+      
+      if (hasMatch) {
+        matchingNodeIds.add(node.id);
+      }
+    });
+    
+    // Find edges where both source and target are matching nodes
+    const connectingEdgeIds = new Set<string>();
+    edges.forEach(edge => {
+      if (matchingNodeIds.has(edge.source) && matchingNodeIds.has(edge.target)) {
+        connectingEdgeIds.add(edge.id);
+      }
+    });
+    
+    // Apply highlight
+    setConnectedSubgraphHighlight({ nodeIds: matchingNodeIds, edgeIds: connectingEdgeIds });
+  };
 
   const reactFlowInstance = useReactFlow();
   const selectedNode = nodes.find((n) => n.selected);
@@ -552,10 +609,30 @@ export const Inspector = () => {
                             title="Открыть в Notion"
                           >
                             {content}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                highlightNodesByParameter('openCondition', [ref.name]);
+                              }}
+                              className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                              title="Подсветить все с таким же параметром"
+                            >
+                              <Search size={12} />
+                            </button>
                           </a>
                         ) : (
                           <div key={i} className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
-                            <span className="truncate">{ref.name}</span>
+                            <span className="truncate flex-1 min-w-0">{ref.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => highlightNodesByParameter('openCondition', [ref.name])}
+                              className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                              title="Подсветить все с таким же параметром"
+                            >
+                              <Search size={12} />
+                            </button>
                           </div>
                         );
                       })}
@@ -571,7 +648,7 @@ export const Inspector = () => {
                       return (
                         <div
                           key={i}
-                          className="text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text"
+                          className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text group"
                           style={{
                             backgroundColor: color ? `${color}20` : undefined,
                             borderLeftWidth: color ? '3px' : undefined,
@@ -579,7 +656,15 @@ export const Inspector = () => {
                             boxShadow: color ? `0 0 10px ${color}40` : undefined,
                           }}
                         >
-                          <span className="truncate block">{item}</span>
+                          <span className="truncate flex-1 min-w-0">{item}</span>
+                          <button
+                            type="button"
+                            onClick={() => highlightNodesByParameter('openCondition', [item])}
+                            className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                            title="Подсветить все с таким же параметром"
+                          >
+                            <Search size={12} />
+                          </button>
                         </div>
                       );
                     })}
@@ -621,13 +706,33 @@ export const Inspector = () => {
                         title="Открыть в Notion"
                       >
                         {content}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            highlightNodesByParameter('ingredients', [ref.name || '']);
+                          }}
+                          className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                          title="Подсветить все с таким же параметром"
+                        >
+                          <Search size={12} />
+                        </button>
                       </a>
                     ) : (
                       <div key={i} className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
-                        <span className="truncate">
+                        <span className="truncate flex-1 min-w-0">
                           {ref.name}
                           {ref.qty ? ` ×${ref.qty}` : ''}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => highlightNodesByParameter('ingredients', [ref.name || ''])}
+                          className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                          title="Подсветить все с таким же параметром"
+                        >
+                          <Search size={12} />
+                        </button>
                       </div>
                     );
                   })}
@@ -663,10 +768,30 @@ export const Inspector = () => {
                         title="Открыть в Notion"
                       >
                         {content}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            highlightNodesByParameter('usedStations', [ref.name || '']);
+                          }}
+                          className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                          title="Подсветить все с таким же параметром"
+                        >
+                          <Search size={12} />
+                        </button>
                       </a>
                     ) : (
                       <div key={i} className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
-                        <span className="truncate">{ref.name}</span>
+                        <span className="truncate flex-1 min-w-0">{ref.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => highlightNodesByParameter('usedStations', [ref.name || ''])}
+                          className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                          title="Подсветить все с таким же параметром"
+                        >
+                          <Search size={12} />
+                        </button>
                       </div>
                     );
                   })}
