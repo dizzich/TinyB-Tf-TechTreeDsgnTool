@@ -1,6 +1,13 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, Search } from 'lucide-react';
 import type { FilterRule, FilterProperty, FilterCondition } from '../types';
+
+const SEARCHABLE_PROPERTIES: Set<FilterProperty> = new Set([
+  'openConditionRefs',
+  'ingredients',
+  'usedCraftStation',
+  'usedStation',
+]);
 
 const PROPERTY_LABELS: Record<FilterProperty, string> = {
   act: 'Акт',
@@ -57,6 +64,12 @@ export const FilterBuilder = ({
   uniqueValues,
   compact = false,
 }: FilterBuilderProps) => {
+  const [searchTerms, setSearchTerms] = React.useState<Record<string, string>>({});
+
+  const setSearchTerm = (ruleId: string, term: string) => {
+    setSearchTerms((prev) => ({ ...prev, [ruleId]: term }));
+  };
+
   const addRule = () => {
     onRulesChange([...rules, createEmptyRule()]);
   };
@@ -108,6 +121,7 @@ export const FilterBuilder = ({
                     property: prop,
                     values: [],
                   });
+                  setSearchTerm(rule.id, '');
                 }}
                 className={selectClass}
               >
@@ -144,8 +158,32 @@ export const FilterBuilder = ({
             </div>
 
             {needsValue && valuesForProperty.length > 0 && (
-              <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto sidebar__scroll">
-                {valuesForProperty.map((val) => {
+              <div className="flex flex-col gap-1.5">
+                {SEARCHABLE_PROPERTIES.has(rule.property) && (
+                  <div className="relative">
+                    <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                    <input
+                      type="text"
+                      value={searchTerms[rule.id] ?? ''}
+                      onChange={(e) => setSearchTerm(rule.id, e.target.value)}
+                      placeholder="Поиск…"
+                      className="w-full text-xs bg-control-bg border border-control-border rounded-control pl-6 pr-2 py-1 text-text placeholder:text-muted focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto sidebar__scroll">
+                {valuesForProperty
+                  .filter((val) => {
+                    const term = searchTerms[rule.id];
+                    if (!term || !SEARCHABLE_PROPERTIES.has(rule.property)) return true;
+                    return val.toLowerCase().includes(term.toLowerCase());
+                  })
+                  .sort((a, b) => {
+                    const aSelected = rule.values.includes(a) ? 0 : 1;
+                    const bSelected = rule.values.includes(b) ? 0 : 1;
+                    return aSelected - bSelected;
+                  })
+                  .map((val) => {
                   const isSelected = rule.values.includes(val);
                   return (
                     <button
@@ -169,6 +207,7 @@ export const FilterBuilder = ({
                     </button>
                   );
                 })}
+                </div>
               </div>
             )}
 

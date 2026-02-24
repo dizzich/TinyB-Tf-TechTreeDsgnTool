@@ -43,6 +43,7 @@ const DEFAULT_COLUMN_MAPPING: NotionColumnMapping = {
   notionSyncStatus: 'TechCraftNotionStatus',
   editorPosition: 'EditorPosition',
   openCondition: 'OpenCondition',
+  lineData: 'lineData',
 };
 
 type Step = 'connect' | 'mapping' | 'sync' | 'result';
@@ -651,6 +652,7 @@ export const NotionSyncModal = () => {
                 {renderMappingSelect('Статус Notion', 'notionSyncStatus')}
                 {renderMappingSelect('Позиция в редакторе', 'editorPosition')}
                 {renderMappingSelect('OpenCondition (условие открытия)', 'openCondition')}
+                {renderMappingSelect('Настройки линий (lineData)', 'lineData')}
               </div>
             </div>
           )}

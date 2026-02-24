@@ -175,7 +175,7 @@ function normalizePtsForOrthogonal(pts: EdgeWaypoint[]): EdgeWaypoint[] {
 /** Default corner waypoints for step/smoothstep with no user waypoints.
  *  Returns two axis-aligned corners that form a clean L-shape. */
 function getDefaultCornerWaypoints(
-  sx: number, sy: number, tx: number, ty: number, gridSize = 8
+  sx: number, sy: number, tx: number, ty: number, gridSize = 10
 ): EdgeWaypoint[] {
   if (Math.abs(sy - ty) < 0.5 || Math.abs(sx - tx) < 0.5) return [];
   const mxVal = (sx + tx) / 2;
@@ -207,7 +207,7 @@ const EditableEdge: React.FC<Props> = ({
   const removeEdgeWaypoint = useStore((s) => s.removeEdgeWaypoint);
   const pushSnapshot = useStore((s) => s._pushSnapshot);
   const snapEnabled = useStore((s) => s.settings.snapEnabled ?? true);
-  const gridSize = useStore((s) => s.settings.snapGridSize ?? 8);
+  const gridSize = useStore((s) => s.settings.snapGridSize ?? 10);
   const effectiveGridSize = snapEnabled && gridSize > 0 ? gridSize : 0;
   const { screenToFlowPosition } = useReactFlow();
 

@@ -205,7 +205,7 @@ const defaultSettings: ProjectSettings = {
   nodeTextFit: true,
   nodeVisualPreset: 'default',
   snapEnabled: true,
-  snapGridSize: 8,
+  snapGridSize: 10,
   snapToObjects: false,
   highlightConnectedSubgraph: true,
   glassEffectEnabled: true,
@@ -440,7 +440,7 @@ export const useStore = create<AppState>()((set, get) => ({
     const settings = get().settings;
     const snapEnabled = settings.snapEnabled ?? true;
     const snapToObjects = settings.snapToObjects ?? false;
-    const snapGridSize = settings.snapGridSize ?? 8;
+    const snapGridSize = settings.snapGridSize ?? 10;
     const nodeMinWidth = settings.nodeMinWidth ?? 200;
     const nodeMinHeight = settings.nodeMinHeight ?? 48;
 

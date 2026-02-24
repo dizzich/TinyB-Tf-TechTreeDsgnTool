@@ -618,7 +618,7 @@ export const Toolbar = () => {
                   min={0}
                   max={64}
                   step={1}
-                  value={settings.snapGridSize ?? 8}
+                  value={settings.snapGridSize ?? 10}
                   onChange={(e) => {
                     const v = parseInt(e.target.value, 10);
                     if (!Number.isNaN(v) && v >= 0) updateSettings({ snapGridSize: v });

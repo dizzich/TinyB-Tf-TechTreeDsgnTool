@@ -40,7 +40,7 @@ export const Graph = () => {
 
   const theme = useStore((state) => state.ui.theme);
   const snapEnabled = useStore((state) => state.settings.snapEnabled ?? true);
-  const snapGridSize = useStore((state) => state.settings.snapGridSize ?? 8);
+  const snapGridSize = useStore((state) => state.settings.snapGridSize ?? 10);
   const edgeType = useStore((state) => state.settings.edgeType) ?? 'default';
   const edgeStrokeWidth = useStore((state) => state.settings.edgeStrokeWidth) ?? 2;
   const edgeAnimated = useStore((state) => state.settings.edgeAnimated) ?? false;

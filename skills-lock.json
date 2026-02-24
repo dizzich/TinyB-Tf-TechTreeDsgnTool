@@ -16,6 +16,11 @@
       "sourceType": "github",
       "computedHash": "25872a21881a950edc3db1f3329664d60405d539660ce05b3265db2de06a7dfd"
     },
+    "notion-api": {
+      "source": "intellectronica/agent-skills",
+      "sourceType": "github",
+      "computedHash": "46d0841e05042daa8c309c4f6b7e71b6747301e98955bed2dde4ef2726dccd6c"
+    },
     "reactflow-custom-nodes": {
       "source": "thebushidocollective/han",
       "sourceType": "github",

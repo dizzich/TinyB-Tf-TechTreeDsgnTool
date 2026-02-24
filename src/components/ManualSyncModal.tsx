@@ -203,6 +203,7 @@ const CATEGORY_FIELD_ORDER = [
   'notionSyncStatus',
   'openCondition',
   'ingredients',
+  'lineData',
   '_node',
 ] as const;
 

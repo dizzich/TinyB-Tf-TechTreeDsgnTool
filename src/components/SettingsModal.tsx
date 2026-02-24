@@ -297,7 +297,7 @@ export const SettingsModal = () => {
                     }
                     className="w-4 h-4 rounded-small border-control-border bg-control-bg text-accent focus:ring-accent focus:ring-offset-0"
                   />
-                  <span>Привязать шаг к сетке привязки (snap: {localSettings.snapGridSize ?? 8}px)</span>
+                  <span>Привязать шаг к сетке привязки (snap: {localSettings.snapGridSize ?? 10}px)</span>
                 </label>
                 <div className={`mb-4${localSettings.bgPatternLinkedToSnap !== false ? ' opacity-50 pointer-events-none' : ''}`}>
                   <label className={labelClass}>
