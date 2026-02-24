@@ -20,9 +20,57 @@ const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected
   const isHighlighted = selected || data?.edgeHighlighted;
   const edges = useStore((state) => state.edges);
   const highlightConnectedSubgraph = useStore((state) => state.settings.highlightConnectedSubgraph ?? true);
+  const connectorTraversalHighlightEnabled = useStore((state) => state.connectorTraversalHighlightEnabled);
   const setConnectedSubgraphHighlight = useStore((state) => state.setConnectedSubgraphHighlight);
   const pointerDownRef = useRef<{ x: number; y: number; time: number; type: 'source' | 'target' } | null>(null);
   const pointerUpHandlerRef = useRef<((e: PointerEvent) => void) | null>(null);
+
+  const collectConnectorHighlight = useCallback(
+    (startNodeId: string, type: 'source' | 'target') => {
+      const nodeIds = new Set<string>([startNodeId]);
+      const edgeIds = new Set<string>();
+
+      const edgesByTraversalNode = new Map<string, Array<(typeof edges)[number]>>();
+      for (const edge of edges) {
+        const traversalNodeId = type === 'target' ? edge.target : edge.source;
+        const current = edgesByTraversalNode.get(traversalNodeId) ?? [];
+        current.push(edge);
+        edgesByTraversalNode.set(traversalNodeId, current);
+      }
+
+      const getLinkedNodeId = (edge: (typeof edges)[number]) =>
+        type === 'target' ? edge.source : edge.target;
+
+      if (!connectorTraversalHighlightEnabled) {
+        const directEdges = edgesByTraversalNode.get(startNodeId) ?? [];
+        for (const edge of directEdges) {
+          edgeIds.add(edge.id);
+          nodeIds.add(getLinkedNodeId(edge));
+        }
+        return { nodeIds, edgeIds };
+      }
+
+      const visited = new Set<string>([startNodeId]);
+      const stack = [startNodeId];
+      while (stack.length > 0) {
+        const currentNodeId = stack.pop();
+        if (!currentNodeId) continue;
+        const connectedEdges = edgesByTraversalNode.get(currentNodeId) ?? [];
+        for (const edge of connectedEdges) {
+          edgeIds.add(edge.id);
+          const linkedNodeId = getLinkedNodeId(edge);
+          nodeIds.add(linkedNodeId);
+          if (!visited.has(linkedNodeId)) {
+            visited.add(linkedNodeId);
+            stack.push(linkedNodeId);
+          }
+        }
+      }
+
+      return { nodeIds, edgeIds };
+    },
+    [edges, connectorTraversalHighlightEnabled]
+  );
 
   const handleConnectorPointerDown = useCallback(
     (ev: React.PointerEvent, type: 'source' | 'target') => {
@@ -37,23 +85,14 @@ const TechNode = ({ data, selected, id }: { data?: Record<string, any>; selected
         const dx = e.clientX - down.x;
         const dy = e.clientY - down.y;
         if (dt < CLICK_MAX_MS && dx * dx + dy * dy < CLICK_MAX_DIST_PX * CLICK_MAX_DIST_PX && highlightConnectedSubgraph) {
-          if (type === 'target') {
-            const incoming = edges.filter((edge) => edge.target === id);
-            const edgeIds = new Set(incoming.map((edge) => edge.id));
-            const nodeIds = new Set<string>([id, ...incoming.map((edge) => edge.source)]);
-            setConnectedSubgraphHighlight({ nodeIds, edgeIds });
-          } else {
-            const outgoing = edges.filter((edge) => edge.source === id);
-            const edgeIds = new Set(outgoing.map((edge) => edge.id));
-            const nodeIds = new Set<string>([id, ...outgoing.map((edge) => edge.target)]);
-            setConnectedSubgraphHighlight({ nodeIds, edgeIds });
-          }
+          const ids = collectConnectorHighlight(id, type);
+          setConnectedSubgraphHighlight(ids);
         }
       };
       pointerUpHandlerRef.current = up;
       document.addEventListener('pointerup', up);
     },
-    [id, edges, highlightConnectedSubgraph, setConnectedSubgraphHighlight]
+    [id, highlightConnectedSubgraph, setConnectedSubgraphHighlight, collectConnectorHighlight]
   );
 
   useEffect(() => {

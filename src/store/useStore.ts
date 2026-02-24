@@ -74,6 +74,8 @@ interface AppState {
 
   // Canvas filter (runtime UI state, not persisted in project)
   canvasFilter: CanvasFilter;
+  /** Connector click mode: recurse through full predecessor/successor chain */
+  connectorTraversalHighlightEnabled: boolean;
 
   /** Edge-click highlight: connected subgraph nodeIds and edgeIds, or null when off */
   connectedSubgraphHighlight: { nodeIds: Set<string>; edgeIds: Set<string> } | null;
@@ -167,6 +169,7 @@ interface AppState {
   removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
 
   setCanvasFilter: (filter: Partial<CanvasFilter>) => void;
+  setConnectorTraversalHighlightEnabled: (enabled: boolean) => void;
   setConnectedSubgraphHighlight: (ids: { nodeIds: Set<string>; edgeIds: Set<string> } | null) => void;
 
   setModalOpen: (modal: 'import' | 'settings' | 'export' | 'notionSync' | 'colorMapping' | 'unsavedChanges' | 'manualSync' | 'saveConfirm', isOpen: boolean) => void;
@@ -394,6 +397,7 @@ export const useStore = create<AppState>()((set, get) => ({
     rules: [],
     hideMode: 'dim',
   },
+  connectorTraversalHighlightEnabled: false,
 
   connectedSubgraphHighlight: null,
 
@@ -867,6 +871,8 @@ export const useStore = create<AppState>()((set, get) => ({
     next.enabled = (next.rules?.length ?? 0) > 0;
     set({ canvasFilter: next });
   },
+  setConnectorTraversalHighlightEnabled: (enabled) =>
+    set({ connectorTraversalHighlightEnabled: enabled }),
 
   setConnectedSubgraphHighlight: (ids) => set({ connectedSubgraphHighlight: ids }),
 

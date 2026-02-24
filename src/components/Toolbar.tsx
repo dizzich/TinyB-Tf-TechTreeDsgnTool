@@ -29,6 +29,7 @@ import {
   PenTool,
   Grid3X3,
   FileJson,
+  Link,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { getLayoutedElements, layoutSubgraph } from '../utils/autoLayout';
@@ -111,6 +112,8 @@ export const Toolbar = () => {
 
   const canvasFilter = useStore((state) => state.canvasFilter);
   const setCanvasFilter = useStore((state) => state.setCanvasFilter);
+  const connectorTraversalHighlightEnabled = useStore((state) => state.connectorTraversalHighlightEnabled);
+  const setConnectorTraversalHighlightEnabled = useStore((state) => state.setConnectorTraversalHighlightEnabled);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -745,6 +748,26 @@ export const Toolbar = () => {
             </div>
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setConnectorTraversalHighlightEnabled(!connectorTraversalHighlightEnabled)
+          }
+          className={`${iconBtnClass} ${connectorTraversalHighlightEnabled
+            ? '!text-accent !border-accent bg-accent/15 shadow-[0_0_8px_rgba(106,162,255,0.4)] ring-1 ring-accent/40'
+            : ''
+            }`}
+          title={
+            connectorTraversalHighlightEnabled
+              ? 'Рекурсивная подсветка цепочек от коннектора: вкл'
+              : 'Рекурсивная подсветка цепочек от коннектора: выкл'
+          }
+          aria-label="Режим подсветки цепочек от коннекторов"
+          aria-pressed={connectorTraversalHighlightEnabled}
+        >
+          <Link size={18} strokeWidth={1.75} />
+        </button>
 
         {/* Canvas Filter */}
         <div className="relative" ref={canvasFilterRef}>
