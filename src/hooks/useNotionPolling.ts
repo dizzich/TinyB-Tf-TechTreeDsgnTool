@@ -8,7 +8,7 @@ const POLL_INTERVAL_MS = 60_000;
 const getEffectiveProxy = (notionCorsProxy: string): string | undefined => {
   if (notionCorsProxy === NOTION_BUILTIN_PROXY) return NOTION_BUILTIN_PROXY;
   if (notionCorsProxy?.trim()) return notionCorsProxy.trim();
-  return import.meta.env.DEV ? NOTION_BUILTIN_PROXY : undefined;
+  return NOTION_BUILTIN_PROXY;
 };
 
 /**

@@ -34,6 +34,21 @@ const NOTION_TIME_BUFFER_MS = 90_000;
 const NOTION_NETWORK_ERROR_MSG =
   "Cannot reach Notion. If you're running in the browser, set a CORS proxy in the Notion Sync settings or use the built-in proxy (dev only).";
 
+/** Normalize Notion database ID: add dashes if missing (xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx → xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) */
+const normalizeDatabaseId = (id: string): string => {
+  // If already has dashes, return as-is
+  if (id.includes('-')) return id;
+  
+  // Remove any non-hex characters
+  const hexOnly = id.replace(/[^a-fA-F0-9]/g, '');
+  
+  // If not 32 chars, return as-is (let Notion return proper error)
+  if (hexOnly.length !== 32) return id;
+  
+  // Insert dashes: 8-4-4-4-12
+  return `${hexOnly.slice(0, 8)}-${hexOnly.slice(8, 12)}-${hexOnly.slice(12, 16)}-${hexOnly.slice(16, 20)}-${hexOnly.slice(20)}`;
+};
+
 /** Strip non-ISO-8859-1 characters from a string (required for fetch headers) */
 const sanitizeHeaderValue = (value: string): string => {
   // Remove BOM, zero-width spaces, and any chars outside ISO-8859-1 range
@@ -62,6 +77,9 @@ const notionFetch = async (
     baseUrl = '/api/notion';
   } else if (proxyVal.replace(/\/+$/, '').endsWith('/api/notion')) {
     // Already points to the proxy endpoint
+    baseUrl = '/api/notion';
+  } else if (/^(https?:\/\/)?(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(proxyVal)) {
+    // User entered local proxy address directly — use built-in proxy path
     baseUrl = '/api/notion';
   } else {
     // External CORS proxy: proxy URL + api.notion.com/v1 path.
@@ -151,13 +169,14 @@ export const queryAllPages = async (
   const allPages: any[] = [];
   let startCursor: string | undefined;
   let hasMore = true;
+  const normalizedId = normalizeDatabaseId(databaseId);
 
   while (hasMore) {
     const body: any = { page_size: 100 };
     if (startCursor) body.start_cursor = startCursor;
 
     const response = await notionFetch(
-      `/databases/${databaseId}/query`,
+      `/databases/${normalizedId}/query`,
       options,
       { method: 'POST', body: JSON.stringify(body) }
     );
@@ -179,6 +198,7 @@ const queryPagesFiltered = async (
   const allPages: any[] = [];
   let startCursor: string | undefined;
   let hasMore = true;
+  const normalizedId = normalizeDatabaseId(databaseId);
 
   while (hasMore) {
     const body: any = { page_size: 100 };
@@ -186,7 +206,7 @@ const queryPagesFiltered = async (
     if (filter) body.filter = filter;
 
     const response = await notionFetch(
-      `/databases/${databaseId}/query`,
+      `/databases/${normalizedId}/query`,
       options,
       { method: 'POST', body: JSON.stringify(body) }
     );
@@ -1734,7 +1754,8 @@ export const testNotionConnection = async (
 ): Promise<{ success: boolean; title?: string; error?: string; properties?: string[] }> => {
   try {
     const options: NotionApiOptions = { apiKey, corsProxy };
-    const db = await notionFetch(`/databases/${databaseId}`, options);
+    const normalizedId = normalizeDatabaseId(databaseId);
+    const db = await notionFetch(`/databases/${normalizedId}`, options);
 
     const title = db.title?.map((t: any) => t.plain_text).join('') || 'Untitled';
     const properties = Object.keys(db.properties || {});
