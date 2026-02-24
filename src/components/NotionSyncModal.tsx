@@ -44,6 +44,7 @@ const DEFAULT_COLUMN_MAPPING: NotionColumnMapping = {
   editorPosition: 'EditorPosition',
   openCondition: 'OpenCondition',
   lineData: 'lineData',
+  itemCodeName: 'ItemCodeName',
 };
 
 type Step = 'connect' | 'mapping' | 'sync' | 'result';
@@ -653,6 +654,7 @@ export const NotionSyncModal = () => {
                 {renderMappingSelect('Позиция в редакторе', 'editorPosition')}
                 {renderMappingSelect('OpenCondition (условие открытия)', 'openCondition')}
                 {renderMappingSelect('Настройки линий (lineData)', 'lineData')}
+                {renderMappingSelect('ItemCodeName (Relation)', 'itemCodeName')}
               </div>
             </div>
           )}

@@ -406,6 +406,30 @@ export const Inspector = () => {
                 placeholder="Название узла"
               />
             </div>
+            <div>
+              <label className={labelClass}>ItemCodeName</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  className={`${inputClass} pr-9 text-sm`}
+                  value={d?.itemCodeName || ''}
+                  readOnly
+                  disabled
+                  style={{ height: '1.75rem' }}
+                  placeholder="Нет данных"
+                />
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(d?.itemCodeName || '')}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-6 flex items-center justify-center rounded-control bg-control-bg-muted border border-control-border-muted text-text hover:border-control-hover-border hover:bg-control-hover-bg transition-colors disabled:opacity-50"
+                  title="Копировать CodeName"
+                  aria-label="Копировать CodeName"
+                  disabled={!d?.itemCodeName}
+                >
+                  <Copy size={12} />
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <ChipSelect
                 label="Акт (TechForAct)"

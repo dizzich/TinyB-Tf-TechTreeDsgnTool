@@ -27,6 +27,7 @@ export interface NodeData {
   // --- Notion identifiers ---
   notionPageId?: string;
   techCraftId?: string;
+  itemCodeName?: string;
 
   // --- Craft recipe data ---
   formulaIngridients?: string;
@@ -169,6 +170,8 @@ export interface NotionColumnMapping {
   openCondition?: string;
   /** Notion property (rich_text) → Edge line data as JSON (waypoints, pathType per outgoing edge) */
   lineData?: string;
+  /** Notion property (relation) → ItemCodeName */
+  itemCodeName?: string;
 }
 
 export type SyncDirection = 'pull' | 'push' | 'bidirectional';

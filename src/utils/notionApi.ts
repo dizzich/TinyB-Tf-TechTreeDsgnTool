@@ -578,6 +578,13 @@ export const notionPageToNodeData = (
         return refs?.length ? { usedStations: refs } : {};
       })()
       : {}),
+    ...(cm.itemCodeName
+      ? (() => {
+        const prop = props[cm.itemCodeName];
+        const codeName = getRollupArrayValue(prop);
+        return codeName ? { itemCodeName: codeName } : {};
+      })()
+      : {}),
     createdAt: page.created_time,
     updatedAt: page.last_edited_time,
     positionModifiedAt: page.last_edited_time,
