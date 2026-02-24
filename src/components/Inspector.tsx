@@ -418,7 +418,7 @@ export const Inspector = () => {
                 label="Стадия"
                 value={d?.stage != null ? String(d.stage) : ''}
                 options={stageOptions}
-                color={getChipColor('stage', d?.stage)}
+                color={getChipColor('stage', d?.stage != null ? String(d.stage) : undefined)}
                 onChange={(v) => handleChange('stage', v || undefined)}
               />
             </div>
@@ -594,8 +594,8 @@ export const Inspector = () => {
                         };
                         const content = (
                           <>
-                            <span className="truncate flex-1 min-w-0">{ref.name}</span>
-                            {ref.pageId && <NotionIcon size={14} className="flex-shrink-0 ml-1.5 opacity-90" color={color} />}
+                            <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">{ref.name}</span>
+                            {ref.pageId && <NotionIcon size={12} className="flex-shrink-0 self-center ml-1 opacity-90" color={color} />}
                           </>
                         );
                         return ref.pageId ? (
@@ -604,7 +604,7 @@ export const Inspector = () => {
                             href={getNotionPageUrl(ref.pageId)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
+                            className="flex items-center text-xs px-1.5 py-0.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
                             style={style}
                             title="Открыть в Notion"
                           >
@@ -616,19 +616,19 @@ export const Inspector = () => {
                                 e.stopPropagation();
                                 highlightNodesByParameter('openCondition', [ref.name]);
                               }}
-                              className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                              className="ml-1 p-1 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0 self-center"
                               title="Подсветить все с таким же параметром"
                             >
                               <Search size={12} />
                             </button>
                           </a>
                         ) : (
-                          <div key={i} className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
-                            <span className="truncate flex-1 min-w-0">{ref.name}</span>
+                          <div key={i} className="flex items-center text-xs px-1.5 py-0.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
+                            <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">{ref.name}</span>
                             <button
                               type="button"
                               onClick={() => highlightNodesByParameter('openCondition', [ref.name])}
-                              className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                              className="ml-1 p-1 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0 self-center"
                               title="Подсветить все с таким же параметром"
                             >
                               <Search size={12} />
@@ -648,7 +648,7 @@ export const Inspector = () => {
                       return (
                         <div
                           key={i}
-                          className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text group"
+                          className="flex items-center text-xs px-1.5 py-0.5 rounded-[8px] border border-control-border-muted text-text"
                           style={{
                             backgroundColor: color ? `${color}20` : undefined,
                             borderLeftWidth: color ? '3px' : undefined,
@@ -656,11 +656,11 @@ export const Inspector = () => {
                             boxShadow: color ? `0 0 10px ${color}40` : undefined,
                           }}
                         >
-                          <span className="truncate flex-1 min-w-0">{item}</span>
+                          <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">{item}</span>
                           <button
                             type="button"
                             onClick={() => highlightNodesByParameter('openCondition', [item])}
-                            className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                            className="ml-1 p-1 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0 self-center"
                             title="Подсветить все с таким же параметром"
                           >
                             <Search size={12} />
@@ -688,11 +688,11 @@ export const Inspector = () => {
                     };
                     const content = (
                       <>
-                        <span className="truncate flex-1 min-w-0">
+                        <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">
                           {ref.name}
                           {ref.qty ? ` ×${ref.qty}` : ''}
                         </span>
-                        {ref.pageId && <NotionIcon size={14} className="flex-shrink-0 ml-1.5 opacity-90" color={color} />}
+                        {ref.pageId && <NotionIcon size={12} className="flex-shrink-0 self-center ml-1 opacity-90" color={color} />}
                       </>
                     );
                     return ref.pageId ? (
@@ -701,7 +701,7 @@ export const Inspector = () => {
                         href={getNotionPageUrl(ref.pageId)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
+                        className="flex items-center text-xs px-1.5 py-0.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
                         style={style}
                         title="Открыть в Notion"
                       >
@@ -713,22 +713,22 @@ export const Inspector = () => {
                             e.stopPropagation();
                             highlightNodesByParameter('ingredients', [ref.name || '']);
                           }}
-                          className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                          className="ml-1 p-1 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0 self-center"
                           title="Подсветить все с таким же параметром"
                         >
                           <Search size={12} />
                         </button>
                       </a>
                     ) : (
-                      <div key={i} className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
-                        <span className="truncate flex-1 min-w-0">
+                      <div key={i} className="flex items-center text-xs px-1.5 py-0.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
+                        <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">
                           {ref.name}
                           {ref.qty ? ` ×${ref.qty}` : ''}
                         </span>
                         <button
                           type="button"
                           onClick={() => highlightNodesByParameter('ingredients', [ref.name || ''])}
-                          className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                          className="ml-1 p-1 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0 self-center"
                           title="Подсветить все с таким же параметром"
                         >
                           <Search size={12} />
@@ -753,8 +753,8 @@ export const Inspector = () => {
                     };
                     const content = (
                       <>
-                        <span className="truncate flex-1 min-w-0">{ref.name}</span>
-                        {ref.pageId && <NotionIcon size={14} className="flex-shrink-0 ml-1.5 opacity-90" color={color} />}
+                        <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">{ref.name}</span>
+                        {ref.pageId && <NotionIcon size={12} className="flex-shrink-0 self-center ml-1 opacity-90" color={color} />}
                       </>
                     );
                     return ref.pageId ? (
@@ -763,7 +763,7 @@ export const Inspector = () => {
                         href={getNotionPageUrl(ref.pageId)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
+                        className="flex items-center text-xs px-1.5 py-0.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
                         style={style}
                         title="Открыть в Notion"
                       >
@@ -775,19 +775,19 @@ export const Inspector = () => {
                             e.stopPropagation();
                             highlightNodesByParameter('usedStations', [ref.name || '']);
                           }}
-                          className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                          className="ml-1 p-1 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0 self-center"
                           title="Подсветить все с таким же параметром"
                         >
                           <Search size={12} />
                         </button>
                       </a>
                     ) : (
-                      <div key={i} className="flex items-center text-xs px-2 py-1.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
-                        <span className="truncate flex-1 min-w-0">{ref.name}</span>
+                      <div key={i} className="flex items-center text-xs px-1.5 py-0.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
+                        <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">{ref.name}</span>
                         <button
                           type="button"
                           onClick={() => highlightNodesByParameter('usedStations', [ref.name || ''])}
-                          className="ml-1.5 p-1.5 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0"
+                          className="ml-1 p-1 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0 self-center"
                           title="Подсветить все с таким же параметром"
                         >
                           <Search size={12} />

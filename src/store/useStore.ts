@@ -235,6 +235,7 @@ function migrateNotionColumnMapping(old: Record<string, unknown>): void {
   if (!cm.stage) cm.stage = 'ActStage';
   if (!cm.ingredients) cm.ingredients = 'Ingridients';
   if (!cm.usedCraftStation) cm.usedCraftStation = 'UsedCraftStation';
+  if (!cm.lineData) cm.lineData = 'lineData';
 }
 
 const loadNotionConfig = (): NotionConfig | null => {

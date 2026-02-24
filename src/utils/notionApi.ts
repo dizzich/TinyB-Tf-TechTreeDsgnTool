@@ -1548,6 +1548,20 @@ function buildSingleNotionProperty(
       return { [cm.nextTechs]: { relation: outgoingRelations } };
     }
   }
+  if (field === 'lineData' && cm.lineData && edges && nodeId) {
+    const outgoingEdges = edges.filter((e) => e.source === nodeId);
+    const lineDataObj: Record<string, { waypoints?: { x: number; y: number }[]; pathType?: string }> = {};
+    for (const edge of outgoingEdges) {
+      if (edge.waypoints?.length || edge.pathType) {
+        lineDataObj[edge.id] = {
+          ...(edge.waypoints?.length ? { waypoints: edge.waypoints } : {}),
+          ...(edge.pathType ? { pathType: edge.pathType } : {}),
+        };
+      }
+    }
+    const content = Object.keys(lineDataObj).length > 0 ? JSON.stringify(lineDataObj) : '';
+    return { [cm.lineData]: { rich_text: [{ text: { content } }] } };
+  }
   return null;
 }
 
