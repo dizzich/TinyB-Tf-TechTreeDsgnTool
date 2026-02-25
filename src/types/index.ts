@@ -172,6 +172,8 @@ export interface NotionColumnMapping {
   lineData?: string;
   /** Notion property (relation) → ItemCodeName */
   itemCodeName?: string;
+  /** Notion property (rich_text) → RecipeDetail with ingredient quantities like "@[ingredient] Xшт" */
+  recipeDetail?: string;
 }
 
 export type SyncDirection = 'pull' | 'push' | 'bidirectional';

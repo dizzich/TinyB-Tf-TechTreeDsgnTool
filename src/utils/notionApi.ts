@@ -424,6 +424,44 @@ const parseLineData = (text: string): Record<string, { waypoints?: { x: number; 
   return {};
 };
 
+/** Parse RecipeDetail rich_text array to extract ingredient quantities. Returns map of ingredient name -> quantity. */
+const parseRecipeDetail = (richTextArray: any[]): Map<string, number> => {
+  const quantityMap = new Map<string, number>();
+  if (!richTextArray || !Array.isArray(richTextArray)) {
+    console.log('RecipeDetail: no rich_text array');
+    return quantityMap;
+  }
+  
+  console.log('RecipeDetail rich_text array:', JSON.stringify(richTextArray, null, 2));
+  
+  for (let i = 0; i < richTextArray.length; i++) {
+    const item = richTextArray[i];
+    // Look for mention type (Notion @[...] references)
+    if (item?.type === 'mention' && item?.mention?.type === 'page') {
+      const mentionText = item?.plain_text || '';
+      console.log(`Found mention: "${mentionText}"`);
+      // Check next item for quantity pattern like "2шт", "3 шт", etc.
+      if (i + 1 < richTextArray.length) {
+        const nextItem = richTextArray[i + 1];
+        const nextText = nextItem?.plain_text || '';
+        console.log(`Next text after mention: "${nextText}"`);
+        // Match patterns: " 2шт", " 3 шт", "2шт", etc.
+        const qtyMatch = nextText.match(/^\s*(\d+)\s*шт/i);
+        if (qtyMatch) {
+          const qty = parseInt(qtyMatch[1], 10);
+          console.log(`Matched quantity ${qty} for "${mentionText}"`);
+          if (!isNaN(qty) && mentionText) {
+            quantityMap.set(mentionText.trim(), qty);
+          }
+        }
+      }
+    }
+  }
+  
+  console.log('RecipeDetail quantity map:', Array.from(quantityMap.entries()));
+  return quantityMap;
+};
+
 /** Apply LineData from pulled pages onto the edge array (mutates in-place for performance) */
 const applyLineDataToEdges = (
   pages: any[],
@@ -543,6 +581,26 @@ export const notionPageToNodeData = (
               pageId: id,
             }))
             : undefined;
+        
+        // Parse RecipeDetail to get quantities and merge with ingredients
+        if (refs?.length && cm.recipeDetail && props[cm.recipeDetail]) {
+          console.log('RecipeDetail column mapped:', cm.recipeDetail);
+          const recipeDetailProp = props[cm.recipeDetail];
+          console.log('RecipeDetail prop:', recipeDetailProp);
+          const richTextArray = recipeDetailProp?.rich_text || [];
+          const quantityMap = parseRecipeDetail(richTextArray);
+          
+          // Merge quantities into refs
+          const refsWithQty = refs.map(ref => {
+            const qty = quantityMap.get(ref.name);
+            console.log(`Ingredient "${ref.name}" - qty from map: ${qty}`);
+            return qty ? { ...ref, qty } : ref;
+          });
+          
+          console.log('Final ingredients with quantities:', refsWithQty);
+          return { ingredients: refsWithQty };
+        }
+        
         return refs?.length ? { ingredients: refs } : {};
       })()
       : {}),
@@ -581,7 +639,9 @@ export const notionPageToNodeData = (
     ...(cm.itemCodeName
       ? (() => {
         const prop = props[cm.itemCodeName];
+        console.log('ItemCodeName prop:', prop);
         const codeName = getRollupArrayValue(prop);
+        console.log('ItemCodeName extracted:', codeName);
         return codeName ? { itemCodeName: codeName } : {};
       })()
       : {}),
