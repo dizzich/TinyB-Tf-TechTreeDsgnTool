@@ -23,6 +23,7 @@ const PROPERTY_LABELS: Record<FilterProperty, string> = {
   openConditionRefs: 'OpenCondition (ссылки)',
   ingredients: 'Из чего крафтится (Ingridients)',
   outputItem: 'Предмет выдачи',
+  outputDetail: 'Количество выходных предметов',
   usedCraftStation: 'На чём крафтится',
   usedStation: 'Станция крафта',
   itemLootingInAct: 'Лут в акте',

@@ -205,6 +205,15 @@ export const Inspector = () => {
             );
           }
           break;
+          
+        case 'outputItem':
+          // Check outputItemRef first
+          if (nodeData.outputItemRef?.name) {
+            hasMatch = paramValues.some(v => nodeData.outputItemRef!.name.toLowerCase() === v.toLowerCase());
+          } else if (nodeData.outputItem) {
+            hasMatch = paramValues.some(v => String(nodeData.outputItem).toLowerCase() === v.toLowerCase());
+          }
+          break;
       }
       
       if (hasMatch) {
@@ -822,7 +831,99 @@ export const Inspector = () => {
                 </div>
               </div>
             )}
-            {(d?.formulaIngridients || d?.outputItem) && (
+            {(d?.outputItemRef || d?.outputItem) && (
+              <div>
+                <label className={labelClass}>Получаемый предмет (OutputItem)</label>
+                <div className="space-y-1">
+                  {(() => {
+                    if (d.outputItemRef) {
+                      const color = getChipColor('outputItem', d.outputItemRef.name);
+                      const style = {
+                        backgroundColor: color ? `${color}20` : undefined,
+                        borderLeftWidth: color ? '3px' : undefined,
+                        borderLeftColor: color || undefined,
+                        boxShadow: color ? `0 0 10px ${color}40` : undefined,
+                      };
+                      const content = (
+                        <>
+                          <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">
+                            {d.outputItemRef.name}
+                            {d.outputItemRef.qty && ` ×${d.outputItemRef.qty}`}
+                          </span>
+                          {d.outputItemRef.pageId && <NotionIcon size={12} className="flex-shrink-0 self-center ml-1 opacity-90" color={color} />}
+                        </>
+                      );
+                      return d.outputItemRef.pageId ? (
+                        <a
+                          key="output-item-ref"
+                          href={getNotionPageUrl(d.outputItemRef.pageId)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center text-xs px-1.5 py-0.5 rounded-[8px] border border-control-border-muted text-text hover:opacity-90 transition-opacity"
+                          style={style}
+                          title="Открыть в Notion"
+                        >
+                          {content}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              highlightNodesByParameter('outputItem', [d.outputItemRef?.name || '']);
+                            }}
+                            className="ml-1 p-1 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0 self-center"
+                            title="Подсветить все с таким же параметром"
+                          >
+                            <Search size={12} />
+                          </button>
+                        </a>
+                      ) : (
+                        <div key="output-item-ref-no-link" className="flex items-center text-xs px-1.5 py-0.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
+                          <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">
+                            {d.outputItemRef.name}
+                            {d.outputItemRef.qty && ` ×${d.outputItemRef.qty}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => highlightNodesByParameter('outputItem', [d.outputItemRef?.name || ''])}
+                            className="ml-1 p-1 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0 self-center"
+                            title="Подсветить все с таким же параметром"
+                          >
+                            <Search size={12} />
+                          </button>
+                        </div>
+                      );
+                    } else if (d.outputItem) {
+                      const color = getChipColor('outputItem', String(d.outputItem));
+                      const style = {
+                        backgroundColor: color ? `${color}20` : undefined,
+                        borderLeftWidth: color ? '3px' : undefined,
+                        borderLeftColor: color || undefined,
+                        boxShadow: color ? `0 0 10px ${color}40` : undefined,
+                      };
+                      return (
+                        <div key="output-item-string" className="flex items-center text-xs px-1.5 py-0.5 rounded-[8px] border border-control-border-muted text-text" style={style}>
+                          <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">
+                            {String(d.outputItem)}
+                            {d.outputDetail && ` ×${d.outputDetail}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => highlightNodesByParameter('outputItem', [String(d.outputItem)])}
+                            className="ml-1 p-1 rounded-[6px] text-muted hover:text-accent hover:bg-control-hover-bg transition-colors flex-shrink-0 self-center"
+                            title="Подсветить все с таким же параметром"
+                          >
+                            <Search size={12} />
+                          </button>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              </div>
+            )}
+            {(d?.formulaIngridients) && (
               <div className="space-y-1.5">
                 {d.formulaIngridients && (
                   <div>
@@ -841,29 +942,6 @@ export const Inspector = () => {
                             </span>
                           ) : null;
                         })}
-                    </div>
-                  </div>
-                )}
-                {d.outputItem && (
-                  <div>
-                    <label className={labelClass}>Результат</label>
-                    <span className="text-xs px-2 py-1 rounded-[8px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                      {typeof d.outputItem === 'string' ? d.outputItem : d.outputItemRef?.name || ''}
-                    </span>
-                  </div>
-                )}
-                {d.recipeDetail && d.recipeDetail.length > 0 && (
-                  <div>
-                    <label className={labelClass}>Рецепт</label>
-                    <div className="flex flex-wrap gap-1">
-                      {d.recipeDetail.map((r: any, i: number) => (
-                        <span
-                          key={i}
-                          className="text-xs px-2 py-0.5 rounded-[8px] bg-control-bg-muted text-text border border-control-border-muted"
-                        >
-                          {r.name}{r.qty ? ` ×${r.qty}` : ''}
-                        </span>
-                      ))}
                     </div>
                   </div>
                 )}

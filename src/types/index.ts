@@ -3,10 +3,11 @@ export interface Position {
   y: number;
 }
 
-/** Parsed Notion relation entry: name + optional Notion page ID */
+/** Parsed Notion relation entry: name + optional Notion page ID + optional quantity */
 export interface NotionRef {
   name: string;
   pageId?: string;
+  qty?: number;
 }
 
 /** Ingredient with quantity parsed from RecipeDetail */
@@ -174,6 +175,8 @@ export interface NotionColumnMapping {
   itemCodeName?: string;
   /** Notion property (rich_text) → RecipeDetail with ingredient quantities like "@[ingredient] Xшт" */
   recipeDetail?: string;
+  /** Notion property (rich_text) → OutputDetail with output item quantity */
+  outputDetail?: string;
 }
 
 export type SyncDirection = 'pull' | 'push' | 'bidirectional';
@@ -325,7 +328,8 @@ export type FilterProperty =
   | 'usedStation'
   | 'itemLootingInAct'
   | 'electricCost'
-  | 'researchTime';
+  | 'researchTime'
+  | 'outputDetail';
 
 /** Filter condition: is / isNot = value-based, isEmpty / isNotEmpty = presence-based */
 export type FilterCondition = 'is' | 'isNot' | 'isNotEmpty' | 'isEmpty';

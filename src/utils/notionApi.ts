@@ -424,6 +424,29 @@ const parseLineData = (text: string): Record<string, { waypoints?: { x: number; 
   return {};
 };
 
+/** Parse OutputDetail rich_text array to extract output item quantity. Returns quantity number or undefined. */
+const parseOutputDetail = (richTextArray: any[]): number | undefined => {
+  if (!richTextArray || !Array.isArray(richTextArray)) {
+    return undefined;
+  }
+  
+  for (let i = 0; i < richTextArray.length; i++) {
+    const item = richTextArray[i];
+    const text = item?.plain_text || '';
+    
+    // Look for quantity patterns like "2шт", "3 шт", etc. in any text item
+    const qtyMatch = text.match(/(\d+)\s*шт/i);
+    if (qtyMatch) {
+      const qty = parseInt(qtyMatch[1], 10);
+      if (!isNaN(qty) && qty > 0) {
+        return qty;
+      }
+    }
+  }
+  
+  return undefined;
+};
+
 /** Parse RecipeDetail rich_text array to extract ingredient quantities. Returns map of ingredient name -> quantity. */
 const parseRecipeDetail = (richTextArray: any[]): Map<string, number> => {
   const quantityMap = new Map<string, number>();
@@ -515,7 +538,8 @@ export const notionPageToNodeData = (
   relationIdToTitle?: Map<string, string>,
   relationIdToTitleIngredients?: Map<string, string>,
   relationIdToTitleUsedCraftStation?: Map<string, string>,
-  relationIdToTitleUsedStation?: Map<string, string>
+  relationIdToTitleUsedStation?: Map<string, string>,
+  relationIdToTitleOutputItem?: Map<string, string>
 ): { notionPageId: string; data: NodeData; position?: { x: number; y: number } } => {
   const props = page.properties;
   const cm = config.columnMapping;
@@ -634,6 +658,60 @@ export const notionPageToNodeData = (
             }))
             : undefined;
         return refs?.length ? { usedStations: refs } : {};
+      })()
+      : {}),
+    ...(cm.outputItem
+      ? (() => {
+        const prop = props[cm.outputItem];
+        // Handle relation type (preferred) or plain text
+        if (prop?.type === 'relation' && prop?.relation) {
+          const map = relationIdToTitleOutputItem;
+          const outputItemRef = {
+            name: map?.get(prop.relation[0]?.id) || prop.relation[0]?.name || 'Unknown',
+            pageId: prop.relation[0]?.id || ''
+          };
+          
+          // Parse OutputDetail to get quantity
+          let outputItemRefWithQty = outputItemRef;
+          if (cm.outputDetail && props[cm.outputDetail]) {
+            const outputDetailProp = props[cm.outputDetail];
+            const richTextArray = outputDetailProp?.rich_text || [];
+            const qty = parseOutputDetail(richTextArray);
+            if (qty) {
+              outputItemRefWithQty = { ...outputItemRef, qty };
+            }
+          }
+          
+          return {
+            outputItem: outputItemRefWithQty.name,
+            outputItemRef: outputItemRefWithQty
+          };
+        } else {
+          const outputItem = getPlainText(prop?.rich_text || []) || getSelectValue(prop) || '';
+          
+          // For plain text outputItem, also try to parse quantity from OutputDetail
+          let outputDetail: string | undefined;
+          if (cm.outputDetail && props[cm.outputDetail]) {
+            const outputDetailProp = props[cm.outputDetail];
+            const richTextArray = outputDetailProp?.rich_text || [];
+            const qty = parseOutputDetail(richTextArray);
+            if (qty) {
+              outputDetail = qty.toString();
+            }
+          }
+          
+          return {
+            outputItem,
+            ...(outputDetail ? { outputDetail } : {})
+          };
+        }
+      })()
+      : {}),
+    ...(cm.outputDetail
+      ? (() => {
+        const prop = props[cm.outputDetail];
+        const outputDetail = getPlainText(prop?.rich_text || []) || getSelectValue(prop) || '';
+        return outputDetail ? { outputDetail } : {};
       })()
       : {}),
     ...(cm.itemCodeName
@@ -783,6 +861,15 @@ async function fetchUsedStationRelationIdToTitle(
   return fetchRelationIdToTitle(pages, config.columnMapping.usedStation, options);
 }
 
+/** Collect all unique relation IDs from OutputItem props and fetch their page titles. Returns id → title map. */
+async function fetchOutputItemRelationIdToTitle(
+  pages: any[],
+  config: NotionConfig,
+  options: NotionApiOptions
+): Promise<Map<string, string>> {
+  return fetchRelationIdToTitle(pages, config.columnMapping.outputItem, options);
+}
+
 /** Pull all data from Notion DB and convert to nodes + edges */
 export const pullFromNotion = async (
   config: NotionConfig,
@@ -797,11 +884,13 @@ export const pullFromNotion = async (
     relationIdToTitleIngredients,
     relationIdToTitleUsedCraftStation,
     relationIdToTitleUsedStation,
+    relationIdToTitleOutputItem,
   ] = await Promise.all([
     fetchOpenConditionRelationIdToTitle(pages, config, options),
     fetchIngredientsRelationIdToTitle(pages, config, options),
     fetchUsedCraftStationRelationIdToTitle(pages, config, options),
     fetchUsedStationRelationIdToTitle(pages, config, options),
+    fetchOutputItemRelationIdToTitle(pages, config, options),
   ]);
 
   const nodes: TechNode[] = [];
@@ -818,7 +907,8 @@ export const pullFromNotion = async (
       relationIdToTitle,
       relationIdToTitleIngredients,
       relationIdToTitleUsedCraftStation,
-      relationIdToTitleUsedStation
+      relationIdToTitleUsedStation,
+      relationIdToTitleOutputItem
     );
     const nodeId = data.techCraftId || `notion-${index}`;
 
@@ -894,7 +984,8 @@ const pagesToNodesAndEdges = (
   relationIdToTitle?: Map<string, string>,
   relationIdToTitleIngredients?: Map<string, string>,
   relationIdToTitleUsedCraftStation?: Map<string, string>,
-  relationIdToTitleUsedStation?: Map<string, string>
+  relationIdToTitleUsedStation?: Map<string, string>,
+  relationIdToTitleOutputItem?: Map<string, string>
 ): { nodes: TechNode[]; edges: TechEdge[]; notionFieldColors: Record<string, Record<string, string>> } => {
   const cm = config.columnMapping;
   const nodes: TechNode[] = [];
@@ -907,7 +998,8 @@ const pagesToNodesAndEdges = (
       relationIdToTitle,
       relationIdToTitleIngredients,
       relationIdToTitleUsedCraftStation,
-      relationIdToTitleUsedStation
+      relationIdToTitleUsedStation,
+      relationIdToTitleOutputItem
     );
     const nodeId = pageIdToNodeId.get(notionPageId) ?? data.techCraftId ?? `notion-${index}`;
     pageIdToNodeId.set(notionPageId, nodeId);
@@ -992,11 +1084,13 @@ const pullChangedPagesAsRemote = async (
     relationIdToTitleIngredients,
     relationIdToTitleUsedCraftStation,
     relationIdToTitleUsedStation,
+    relationIdToTitleOutputItem,
   ] = await Promise.all([
     fetchOpenConditionRelationIdToTitle(pages, config, options),
     fetchIngredientsRelationIdToTitle(pages, config, options),
     fetchUsedCraftStationRelationIdToTitle(pages, config, options),
     fetchUsedStationRelationIdToTitle(pages, config, options),
+    fetchOutputItemRelationIdToTitle(pages, config, options),
   ]);
   return pagesToNodesAndEdges(
     pages,
@@ -1005,7 +1099,8 @@ const pullChangedPagesAsRemote = async (
     relationIdToTitle,
     relationIdToTitleIngredients,
     relationIdToTitleUsedCraftStation,
-    relationIdToTitleUsedStation
+    relationIdToTitleUsedStation,
+    relationIdToTitleOutputItem
   );
 };
 

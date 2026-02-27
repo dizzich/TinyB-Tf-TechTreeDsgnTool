@@ -46,6 +46,7 @@ const DEFAULT_COLUMN_MAPPING: NotionColumnMapping = {
   lineData: 'lineData',
   itemCodeName: 'ItemCodeName',
   recipeDetail: 'RecipeDetail',
+  outputDetail: 'OutputDetail',
 };
 
 type Step = 'connect' | 'mapping' | 'sync' | 'result';
@@ -657,6 +658,7 @@ export const NotionSyncModal = () => {
                 {renderMappingSelect('Настройки линий (lineData)', 'lineData')}
                 {renderMappingSelect('ItemCodeName (Relation)', 'itemCodeName')}
                 {renderMappingSelect('RecipeDetail (количество ингредиентов)', 'recipeDetail')}
+                {renderMappingSelect('OutputDetail (количество выходных предметов)', 'outputDetail')}
               </div>
             </div>
           )}
